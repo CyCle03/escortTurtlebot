@@ -20,19 +20,13 @@ import os
 
 from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument
-from launch.actions import OpaqueFunction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
 
-def _launch_setup(context):
-    use_sim_time = LaunchConfiguration('use_sim_time')
-    number_of_follower = int(LaunchConfiguration('number_of_follower').perform(context))
-
-    if number_of_follower < 1 or number_of_follower > 4:
-        raise RuntimeError('number_of_follower must be between 1 and 4')
-
+def generate_launch_description():
+    use_sim_time = LaunchConfiguration('use_sim_time', default='false')
+    number_of_follower = 4
     follower = Node(
         package='escort_follower',
         executable='follower',
@@ -45,17 +39,11 @@ def _launch_setup(context):
     for i in range(number_of_follower):
         namespace = f'TB3_{i+2}'
 
-        custom_ctrl_yaml_path = os.path.join(
-            get_package_share_directory('escort_turtlebot_pkg'),
-            'param',
-            f'escort_controll_server{i+1}.yaml'
-        )
-        default_ctrl_yaml_path = os.path.join(
+        ctrl_yaml_path = os.path.join(
             get_package_share_directory('escort_follower'),
             'param',
             f'controll_server{i+1}.yaml'
         )
-        ctrl_yaml_path = custom_ctrl_yaml_path if os.path.exists(custom_ctrl_yaml_path) else default_ctrl_yaml_path
 
         ctrl_node = Node(
             package='nav2_controller',
@@ -97,24 +85,4 @@ def _launch_setup(context):
         nodes.append(lifecycle_node)
         nodes.append(velocity_smoother_node)
 
-    return nodes
-
-
-def generate_launch_description():
-    ld = LaunchDescription()
-    ld.add_action(
-        DeclareLaunchArgument(
-            'use_sim_time',
-            default_value='false',
-            description='Use simulation clock if true'
-        )
-    )
-    ld.add_action(
-        DeclareLaunchArgument(
-            'number_of_follower',
-            default_value='1',
-            description='Number of follower robots'
-        )
-    )
-    ld.add_action(OpaqueFunction(function=_launch_setup))
-    return ld
+    return LaunchDescription(nodes)
