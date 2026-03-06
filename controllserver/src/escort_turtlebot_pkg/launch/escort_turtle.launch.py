@@ -33,9 +33,9 @@ from launch_ros.actions import PushRosNamespace
 def generate_launch_description():
     TURTLEBOT3_MODEL = os.environ['TURTLEBOT3_MODEL']
 
-    number_of_robots = 5
+    number_of_robots = 2
     namespace = 'TB3'
-    pose = [[-0.8,-0.5], [-1.0,-0.5], [-1.2,-0.5], [-1.4,-0.5], [-1.6,-0.5]]
+    pose = [[-1.0,0.5], [-1.0,-0.5]]
     model_folder = 'turtlebot3_' + TURTLEBOT3_MODEL
     urdf_path = os.path.join(
         get_package_share_directory('turtlebot3_gazebo'),
@@ -49,7 +49,8 @@ def generate_launch_description():
         model_folder,
         'tmp'
     )
-    launch_file_dir = os.path.join(get_package_share_directory('turtlebot3_gazebo'), 'launch')
+    gazebo_launch_dir = os.path.join(get_package_share_directory('turtlebot3_gazebo'), 'launch')
+    escort_launch_dir = os.path.join(get_package_share_directory('escort_turtlebot_pkg'), 'launch')
     pkg_gazebo_ros = get_package_share_directory('gazebo_ros')
 
     use_sim_time = LaunchConfiguration('use_sim_time', default='false')
@@ -79,7 +80,7 @@ def generate_launch_description():
         robot_state_publisher_cmd_list.append(
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    os.path.join(launch_file_dir, 'robot_state_publisher.launch.py')
+                    os.path.join(gazebo_launch_dir, 'robot_state_publisher.launch.py')
                 ),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
@@ -107,7 +108,7 @@ def generate_launch_description():
         spawn_turtlebot_cmd_list.append(
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
-                    os.path.join(launch_file_dir, 'escort_spawn.launch.py')
+                    os.path.join(escort_launch_dir, 'escort_spawn.launch.py')
                 ),
                 launch_arguments={
                         'x_pose': str(pose[count][0]),
