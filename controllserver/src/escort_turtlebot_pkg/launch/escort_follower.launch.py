@@ -27,7 +27,7 @@ from launch_ros.actions import Node
 
 
 def _launch_setup(context):
-    use_sim_time = LaunchConfiguration('use_sim_time').perform(context)
+    use_sim_time = LaunchConfiguration('use_sim_time')
     number_of_follower = int(LaunchConfiguration('number_of_follower').perform(context))
 
     if number_of_follower < 1 or number_of_follower > 4:
@@ -45,11 +45,17 @@ def _launch_setup(context):
     for i in range(number_of_follower):
         namespace = f'TB3_{i+2}'
 
-        ctrl_yaml_path = os.path.join(
+        custom_ctrl_yaml_path = os.path.join(
+            get_package_share_directory('escort_turtlebot_pkg'),
+            'param',
+            f'escort_controll_server{i+1}.yaml'
+        )
+        default_ctrl_yaml_path = os.path.join(
             get_package_share_directory('turtlebot3_follower'),
             'param',
             f'controll_server{i+1}.yaml'
         )
+        ctrl_yaml_path = custom_ctrl_yaml_path if os.path.exists(custom_ctrl_yaml_path) else default_ctrl_yaml_path
 
         ctrl_node = Node(
             package='nav2_controller',

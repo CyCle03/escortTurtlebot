@@ -10,6 +10,7 @@ from launch.actions import GroupAction
 from launch.actions import IncludeLaunchDescription
 from launch.actions import OpaqueFunction
 from launch.actions import RegisterEventHandler
+from launch.actions import TimerAction
 from launch.event_handlers import OnShutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
@@ -21,7 +22,7 @@ def _launch_setup(context):
     namespace_prefix = 'TB3'
     number_of_robots = 2
 
-    use_sim_time = LaunchConfiguration('use_sim_time').perform(context)
+    use_sim_time = LaunchConfiguration('use_sim_time')
     leader_x = LaunchConfiguration('leader_x').perform(context)
     leader_y = LaunchConfiguration('leader_y').perform(context)
     follower_x = LaunchConfiguration('follower_x').perform(context)
@@ -52,11 +53,9 @@ def _launch_setup(context):
             PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py'))
         )
     )
-    actions.append(
-        IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(escort_launch_dir, 'escort_core.launch.py')),
-            launch_arguments={'use_sim_time': use_sim_time, 'number_of_follower': '1'}.items(),
-        )
+    core_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(escort_launch_dir, 'escort_core.launch.py')),
+        launch_arguments={'use_sim_time': use_sim_time, 'number_of_follower': '1'}.items(),
     )
 
     robot_state_publisher_cmd_list = []
@@ -123,6 +122,13 @@ def _launch_setup(context):
                 ]
             )
         )
+
+    actions.append(
+        TimerAction(
+            period=5.0,
+            actions=[core_launch],
+        )
+    )
 
     return actions
 
