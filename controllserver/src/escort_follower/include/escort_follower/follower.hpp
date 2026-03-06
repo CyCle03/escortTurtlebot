@@ -19,7 +19,6 @@
 
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
-#include <tf2_ros/static_transform_broadcaster.h>
 #include <tf2_ros/transform_listener.h>
 #include <tf2_ros/buffer.h>
 
@@ -51,14 +50,16 @@ private:
   geometry_msgs::msg::TransformStamped target_pose_;
   geometry_msgs::msg::PoseStamped prior_second_target_pose_;
   rclcpp::TimerBase::SharedPtr send_path_timer_;
+  rclcpp::TimerBase::SharedPtr tf_publish_timer_;
   rclcpp_action::Client<nav2_msgs::action::FollowPath>::SharedPtr nav2_action_client_;
-  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> tf_broadcaster_;
+  std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
 
   std::string leader_name_;
   std::string follower_name_;
   bool use_sim_time_;
+  bool publish_odom_bridge_;
   double follow_distance_;
 };
 

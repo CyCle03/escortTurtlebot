@@ -27,6 +27,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'lidar_odom_bridge = escort_turtlebot_pkg.lidar_odom_bridge_node:main',
         ],
     },
 )

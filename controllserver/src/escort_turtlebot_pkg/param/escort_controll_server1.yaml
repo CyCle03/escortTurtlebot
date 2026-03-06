@@ -68,8 +68,8 @@
   local_costmap:
     local_costmap:
       ros__parameters:
-        global_frame: TB3_1/odom
-        robot_base_frame: TB3_2/base_link
+        global_frame: TB3_2/odom
+        robot_base_frame: TB3_2/base_footprint
         update_frequency: 5.0
         resolution: 0.05
         width: 3

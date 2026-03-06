@@ -22,6 +22,7 @@ from ament_index_python.packages import get_package_share_directory
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.actions import OpaqueFunction
+from launch.actions import TimerAction
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
 
@@ -38,12 +39,34 @@ def _launch_setup(context):
         executable='follower',
         output='screen',
         arguments=[str(number_of_follower)],
-        parameters=[{'use_sim_time': use_sim_time}, {'follow_distance': 0.5}]
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'follow_distance': 0.5},
+            {'publish_odom_bridge': False},
+        ]
     )
     nodes = []
     nodes.append(follower)
     for i in range(number_of_follower):
         namespace = f'TB3_{i+2}'
+        leader_namespace = f'TB3_{i+1}'
+        tf_bridge_node = Node(
+            package='escort_turtlebot_pkg',
+            executable='lidar_odom_bridge',
+            name=f'lidar_odom_bridge_{leader_namespace}_to_{namespace}',
+            output='screen',
+            parameters=[
+                {'use_sim_time': use_sim_time},
+                {'scan_topic': f'/{namespace}/scan'},
+                {'leader_ns': leader_namespace},
+                {'follower_ns': namespace},
+                {'target_bearing_deg': 0.0},
+                {'search_half_angle_deg': 25.0},
+                {'min_range': 0.12},
+                {'max_range': 3.0},
+                {'smoothing_alpha': 0.35},
+            ],
+        )
 
         custom_ctrl_yaml_path = os.path.join(
             get_package_share_directory('escort_turtlebot_pkg'),
@@ -93,9 +116,13 @@ def _launch_setup(context):
                 (f'/{namespace}/cmd_vel', f'/{namespace}/cmd_vel_not_smoothed'),
                 (f'/{namespace}/cmd_vel_smoothed', f'/{namespace}/cmd_vel')]
         )
-        nodes.append(ctrl_node)
-        nodes.append(lifecycle_node)
-        nodes.append(velocity_smoother_node)
+        nodes.append(tf_bridge_node)
+        nodes.append(
+            TimerAction(
+                period=3.0,
+                actions=[ctrl_node, lifecycle_node, velocity_smoother_node],
+            )
+        )
 
     return nodes
 

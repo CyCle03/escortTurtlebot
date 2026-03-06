@@ -27,17 +27,24 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   leader_name_(leader_name),
   follower_name_(follower_name)
 {
-  this->declare_parameter<bool>("use_sim_time", false);
+  this->declare_parameter<bool>("publish_odom_bridge", true);
   this->declare_parameter<double>("follow_distance", 0.5);
-  get_parameter("use_sim_time", use_sim_time_);
+  if (!get_parameter("use_sim_time", use_sim_time_)) {
+    use_sim_time_ = false;
+  }
+  get_parameter("publish_odom_bridge", publish_odom_bridge_);
   get_parameter("follow_distance", follow_distance_);
 
-  tf_broadcaster_ = std::make_shared<tf2_ros::StaticTransformBroadcaster>(this);
+  if (publish_odom_bridge_) {
+    tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+    tf_publish_timer_ = this->create_wall_timer(
+      std::chrono::milliseconds(100),
+      std::bind(&Follower::tf_publisher, this));
+  }
   nav2_action_client_ = rclcpp_action::create_client<nav2_msgs::action::FollowPath>(
     this,
     follower_name_ + "/follow_path");
 
-  tf_publisher();
   send_path_timer_ = this->create_wall_timer(
     std::chrono::milliseconds(100),
     std::bind(&Follower::send_path, this));
@@ -50,6 +57,9 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
 
 void Follower::tf_publisher()
 {
+  if (!publish_odom_bridge_ || !tf_broadcaster_) {
+    return;
+  }
   geometry_msgs::msg::TransformStamped tf_msg;
   tf_msg.header.stamp = this->get_clock()->now();
   tf_msg.header.frame_id = this->leader_name_ + "/odom";
@@ -59,6 +69,7 @@ void Follower::tf_publisher()
     tf_msg.transform.translation.x = 0;
     tf_msg.transform.translation.y = 0;
     tf_msg.transform.translation.z = 0;
+    tf_msg.transform.rotation.x = 0.0;
     tf_msg.transform.rotation.y = 0.0;
     tf_msg.transform.rotation.z = 0.0;
     tf_msg.transform.rotation.w = 1.0;
@@ -71,7 +82,6 @@ void Follower::tf_publisher()
     tf_msg.transform.rotation.z = 0.0;
     tf_msg.transform.rotation.w = 1.0;
   }
-  RCLCPP_INFO(this->get_logger(), "tf publish");
   this->tf_broadcaster_->sendTransform(tf_msg);
 }
 
@@ -79,8 +89,8 @@ void Follower::get_target_pose()
 {
   try {
     this->target_pose_ = this->tf_buffer_.lookupTransform(
-      this->follower_name_ + "/base_link",
-      this->leader_name_ + "/base_link",
+      this->follower_name_ + "/base_footprint",
+      this->leader_name_ + "/base_footprint",
       tf2::TimePointZero);
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN(this->get_logger(), "Waiting for TF");
@@ -92,11 +102,11 @@ void Follower::send_path()
   get_target_pose();
   nav_msgs::msg::Path path;
   path.header.stamp = this->get_clock()->now();
-  path.header.frame_id = follower_name_ + "/base_link";
+  path.header.frame_id = follower_name_ + "/base_footprint";
 
   geometry_msgs::msg::PoseStamped first_target_pose;
   first_target_pose.header.stamp = this->get_clock()->now();
-  first_target_pose.header.frame_id = follower_name_ + "/base_link";
+  first_target_pose.header.frame_id = follower_name_ + "/base_footprint";
   first_target_pose.pose.position.x = this->prior_second_target_pose_.pose.position.x;
   first_target_pose.pose.position.y = this->prior_second_target_pose_.pose.position.y;
   first_target_pose.pose.orientation = this->prior_second_target_pose_.pose.orientation;
@@ -104,7 +114,7 @@ void Follower::send_path()
 
   geometry_msgs::msg::PoseStamped second_target_pose;
   second_target_pose.header.stamp = this->get_clock()->now();
-  second_target_pose.header.frame_id = follower_name_ + "/base_link";
+  second_target_pose.header.frame_id = follower_name_ + "/base_footprint";
   const double dx = this->target_pose_.transform.translation.x;
   const double dy = this->target_pose_.transform.translation.y;
   const double distance = std::hypot(dx, dy);
