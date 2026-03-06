@@ -21,3 +21,8 @@ venv/
 
 # IDE / editor local files
 .idea/
+
+# Nested colcon artifacts
+controllserver/build/
+controllserver/install/
+controllserver/log/
