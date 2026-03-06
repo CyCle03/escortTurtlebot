@@ -136,9 +136,9 @@ def generate_launch_description():
             description='Use simulation clock if true',
         )
     )
-    ld.add_action(DeclareLaunchArgument('leader_x', default_value='1.0'))
-    ld.add_action(DeclareLaunchArgument('leader_y', default_value='0.0'))
-    ld.add_action(DeclareLaunchArgument('follower_x', default_value='-1.0'))
-    ld.add_action(DeclareLaunchArgument('follower_y', default_value='0.0'))
+    ld.add_action(DeclareLaunchArgument('leader_x', default_value='0.0'))
+    ld.add_action(DeclareLaunchArgument('leader_y', default_value='-0.5'))
+    ld.add_action(DeclareLaunchArgument('follower_x', default_value='-1.2'))
+    ld.add_action(DeclareLaunchArgument('follower_y', default_value='-0.5'))
     ld.add_action(OpaqueFunction(function=_launch_setup))
     return ld
