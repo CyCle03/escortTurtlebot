@@ -15,6 +15,10 @@ def generate_launch_description():
     number_of_follower = LaunchConfiguration('number_of_follower')
     odom_bridge_x = LaunchConfiguration('odom_bridge_x')
     odom_bridge_y = LaunchConfiguration('odom_bridge_y')
+    leader_initial_move_enabled = LaunchConfiguration('leader_initial_move_enabled')
+    leader_initial_move = LaunchConfiguration('leader_initial_move')
+    leader_initial_move_speed = LaunchConfiguration('leader_initial_move_speed')
+    leader_initial_move_startup_delay = LaunchConfiguration('leader_initial_move_startup_delay')
 
     declare_use_sim_time = DeclareLaunchArgument(
         'use_sim_time',
@@ -28,13 +32,33 @@ def generate_launch_description():
     )
     declare_odom_bridge_x = DeclareLaunchArgument(
         'odom_bridge_x',
-        default_value='-0.22',
+        default_value='-0.30',
         description='Static TF x offset from TB3_1/odom to TB3_2/odom'
     )
     declare_odom_bridge_y = DeclareLaunchArgument(
         'odom_bridge_y',
         default_value='0.0',
         description='Static TF y offset from TB3_1/odom to TB3_2/odom'
+    )
+    declare_leader_initial_move_enabled = DeclareLaunchArgument(
+        'leader_initial_move_enabled',
+        default_value='true',
+        description='Run one-time initial forward movement for leader robot'
+    )
+    declare_leader_initial_move = DeclareLaunchArgument(
+        'leader_initial_move',
+        default_value='0.5',
+        description='One-time initial forward distance for leader robot (meters)'
+    )
+    declare_leader_initial_move_speed = DeclareLaunchArgument(
+        'leader_initial_move_speed',
+        default_value='0.12',
+        description='Leader initial move linear speed (m/s)'
+    )
+    declare_leader_initial_move_startup_delay = DeclareLaunchArgument(
+        'leader_initial_move_startup_delay',
+        default_value='1.0',
+        description='Delay before leader initial move starts (seconds)'
     )
 
     launch_dir = os.path.join(get_package_share_directory('escort_turtlebot_pkg'), 'launch')
@@ -45,6 +69,10 @@ def generate_launch_description():
             'number_of_follower': number_of_follower,
             'odom_bridge_x': odom_bridge_x,
             'odom_bridge_y': odom_bridge_y,
+            'leader_initial_move_enabled': leader_initial_move_enabled,
+            'leader_initial_move': leader_initial_move,
+            'leader_initial_move_speed': leader_initial_move_speed,
+            'leader_initial_move_startup_delay': leader_initial_move_startup_delay,
         }.items(),
     )
 
@@ -53,5 +81,9 @@ def generate_launch_description():
     ld.add_action(declare_number_of_follower)
     ld.add_action(declare_odom_bridge_x)
     ld.add_action(declare_odom_bridge_y)
+    ld.add_action(declare_leader_initial_move_enabled)
+    ld.add_action(declare_leader_initial_move)
+    ld.add_action(declare_leader_initial_move_speed)
+    ld.add_action(declare_leader_initial_move_startup_delay)
     ld.add_action(follower_launch)
     return ld

@@ -14,7 +14,6 @@ from launch.actions import TimerAction
 from launch.event_handlers import OnShutdown
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration
-from launch_ros.actions import Node
 from launch_ros.actions import PushRosNamespace
 
 
@@ -33,7 +32,7 @@ def _launch_setup(context):
         odom_bridge_x = str(float(follower_x) - float(leader_x))
         odom_bridge_y = str(float(follower_y) - float(leader_y))
     except ValueError:
-        odom_bridge_x = '-0.22'
+        odom_bridge_x = '-0.30'
         odom_bridge_y = '0.0'
 
     pose = [[leader_x, leader_y], [follower_x, follower_y]]
@@ -68,18 +67,11 @@ def _launch_setup(context):
             'number_of_follower': '1',
             'odom_bridge_x': odom_bridge_x,
             'odom_bridge_y': odom_bridge_y,
+            'leader_initial_move_enabled': 'true',
+            'leader_initial_move': leader_initial_move,
+            'leader_initial_move_speed': '0.10',
+            'leader_initial_move_startup_delay': '2.0',
         }.items(),
-    )
-    leader_initial_move_node = Node(
-        package='escort_turtlebot_pkg',
-        executable='leader_initial_move_node',
-        output='screen',
-        parameters=[
-            {'cmd_vel_topic': '/TB3_1/cmd_vel'},
-            {'distance': leader_initial_move},
-            {'speed': 0.10},
-            {'startup_delay_sec': 2.0},
-        ],
     )
 
     robot_state_publisher_cmd_list = []
@@ -150,7 +142,7 @@ def _launch_setup(context):
     actions.append(
         TimerAction(
             period=5.0,
-            actions=[core_launch, leader_initial_move_node],
+            actions=[core_launch],
         )
     )
 
@@ -168,7 +160,7 @@ def generate_launch_description():
     )
     ld.add_action(DeclareLaunchArgument('leader_x', default_value='0.0'))
     ld.add_action(DeclareLaunchArgument('leader_y', default_value='-0.5'))
-    ld.add_action(DeclareLaunchArgument('follower_x', default_value='-0.22'))
+    ld.add_action(DeclareLaunchArgument('follower_x', default_value='-0.30'))
     ld.add_action(DeclareLaunchArgument('follower_y', default_value='-0.5'))
     ld.add_action(
         DeclareLaunchArgument(

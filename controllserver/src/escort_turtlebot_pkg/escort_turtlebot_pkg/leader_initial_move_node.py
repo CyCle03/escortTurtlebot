@@ -1,45 +1,84 @@
 import rclpy
 from geometry_msgs.msg import Twist
+from nav_msgs.msg import Odometry
 from rclpy.node import Node
+import math
 
 
 class LeaderInitialMoveNode(Node):
     def __init__(self):
         super().__init__('leader_initial_move_node')
         self.declare_parameter('cmd_vel_topic', '/TB3_1/cmd_vel')
+        self.declare_parameter('odom_topic', '/TB3_1/odom')
         self.declare_parameter('distance', 0.5)
         self.declare_parameter('speed', 0.10)
         self.declare_parameter('startup_delay_sec', 2.0)
+        self.declare_parameter('max_duration_sec', 10.0)
 
         cmd_vel_topic = self.get_parameter('cmd_vel_topic').get_parameter_value().string_value
+        odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         distance = self.get_parameter('distance').get_parameter_value().double_value
         speed = self.get_parameter('speed').get_parameter_value().double_value
         startup_delay_sec = self.get_parameter('startup_delay_sec').get_parameter_value().double_value
+        self.max_duration_sec = self.get_parameter('max_duration_sec').get_parameter_value().double_value
 
         self.speed = max(0.01, abs(speed))
-        self.move_duration = max(0.0, abs(distance) / self.speed)
+        self.target_distance = abs(distance)
         self.direction = 1.0 if distance >= 0.0 else -1.0
         self.active = False
+        self.completed = False
         self.elapsed = 0.0
+        self.current_x = None
+        self.current_y = None
+        self.start_x = None
+        self.start_y = None
 
         self.cmd_pub = self.create_publisher(Twist, cmd_vel_topic, 10)
+        self.odom_sub = self.create_subscription(Odometry, odom_topic, self._odom_callback, 10)
 
         self.timer_period = 0.05
         self.control_timer = self.create_timer(self.timer_period, self._control_loop)
         self.start_timer = self.create_timer(startup_delay_sec, self._start_move)
 
+    def _odom_callback(self, msg: Odometry):
+        self.current_x = msg.pose.pose.position.x
+        self.current_y = msg.pose.pose.position.y
+
     def _start_move(self):
         self.start_timer.cancel()
+        if self.target_distance <= 0.0:
+            self.completed = True
+            return
         self.active = True
         self.elapsed = 0.0
+        self.start_x = None
+        self.start_y = None
 
     def _control_loop(self):
+        if self.completed:
+            return
+
+        if not self.active:
+            # Wait until startup delay elapses.
+            return
+
+        # Capture start pose on the first odom update after activation.
+        if self.start_x is None and self.current_x is not None:
+            self.start_x = self.current_x
+            self.start_y = self.current_y
+
+        moved_distance = 0.0
+        if self.start_x is not None and self.current_x is not None:
+            moved_distance = math.hypot(self.current_x - self.start_x, self.current_y - self.start_y)
+
+        self.elapsed += self.timer_period
+
         twist = Twist()
-        if self.active and self.elapsed < self.move_duration:
+        if moved_distance < self.target_distance and self.elapsed < self.max_duration_sec:
             twist.linear.x = self.direction * self.speed
-            self.elapsed += self.timer_period
         else:
             self.active = False
+            self.completed = True
             self.control_timer.cancel()
         self.cmd_pub.publish(twist)
 
