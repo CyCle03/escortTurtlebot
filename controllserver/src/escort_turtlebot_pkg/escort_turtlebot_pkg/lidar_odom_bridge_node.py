@@ -83,7 +83,6 @@ class LidarOdomBridgeNode(Node):
         self.declare_parameter('smoothing_alpha', 0.35)
         self.declare_parameter('min_candidate_points', 3)
         self.declare_parameter('max_tracking_jump', 0.6)
-        self.declare_parameter('use_sim_time', False)
 
         scan_topic = self.get_parameter('scan_topic').get_parameter_value().string_value
         self.leader_ns = self.get_parameter('leader_ns').get_parameter_value().string_value
