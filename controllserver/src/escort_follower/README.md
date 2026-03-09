@@ -35,6 +35,8 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
 ## Notes
 - TF lookup failures are skipped safely (no stale goal resend on TF miss).
 - Goal updates are rate-limited and change-filtered to reduce Nav2 action spam.
+- Distance sensing/calculation reference:
+  - `docs/distance_measurement_reference.md`
 
 ## 한국어 안내
 
@@ -67,3 +69,5 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py number_of_follower:=1
 ### 참고
 - TF 조회 실패 시 goal 전송을 건너뛰도록 처리되어 있습니다.
 - goal 전송은 변화량/주기 필터가 적용되어 액션 과전송을 줄입니다.
+- 거리 인식/계산 참고 문서:
+  - `docs/distance_measurement_reference.md`
