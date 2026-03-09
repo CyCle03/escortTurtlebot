@@ -26,6 +26,21 @@ source install/setup.bash
 ros2 launch escort_turtlebot_pkg escort_sim.launch.py
 ```
 
+## Leader Keyboard Teleop
+Use a separate terminal after simulation starts:
+
+```bash
+cd ~/escort_ws/controllserver
+source /opt/ros/humble/setup.bash
+source ~/turtlebot3_ws/install/setup.bash
+source install/setup.bash
+
+ros2 run turtlebot3_teleop teleop_keyboard --ros-args -r cmd_vel:=/TB3_1/cmd_vel
+```
+
+If your teleop package exposes a different executable name, use that package's command
+but keep remapping to `/TB3_1/cmd_vel`.
+
 ## Main Launch Arguments (`escort_sim.launch.py`)
 - `use_sim_time` (bool, default: `true`)
   Use simulation clock.
@@ -61,6 +76,21 @@ source install/setup.bash
 
 ros2 launch escort_turtlebot_pkg escort_sim.launch.py
 ```
+
+### 리더 키보드 조종
+시뮬레이션 실행 후, 별도 터미널에서 아래 명령으로 리더(`TB3_1`)를 조종합니다.
+
+```bash
+cd ~/escort_ws/controllserver
+source /opt/ros/humble/setup.bash
+source ~/turtlebot3_ws/install/setup.bash
+source install/setup.bash
+
+ros2 run turtlebot3_teleop teleop_keyboard --ros-args -r cmd_vel:=/TB3_1/cmd_vel
+```
+
+사용 중인 teleop 패키지의 실행 파일 이름이 다르면 해당 명령을 사용하되,
+`cmd_vel` 리매핑은 `/TB3_1/cmd_vel`로 유지하세요.
 
 ### 주요 런치 인자 (`escort_sim.launch.py`)
 - `use_sim_time` (기본값 `true`): 시뮬레이션 시간 사용 여부
