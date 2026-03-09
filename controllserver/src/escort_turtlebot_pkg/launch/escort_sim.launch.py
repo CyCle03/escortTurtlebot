@@ -27,6 +27,12 @@ def _launch_setup(context):
     leader_y = LaunchConfiguration('leader_y').perform(context)
     follower_x = LaunchConfiguration('follower_x').perform(context)
     follower_y = LaunchConfiguration('follower_y').perform(context)
+    try:
+        odom_bridge_x = str(float(follower_x) - float(leader_x))
+        odom_bridge_y = str(float(follower_y) - float(leader_y))
+    except ValueError:
+        odom_bridge_x = '-1.2'
+        odom_bridge_y = '0.0'
 
     pose = [[leader_x, leader_y], [follower_x, follower_y]]
 
@@ -55,7 +61,12 @@ def _launch_setup(context):
     )
     core_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(os.path.join(escort_launch_dir, 'escort_core.launch.py')),
-        launch_arguments={'use_sim_time': use_sim_time, 'number_of_follower': '1'}.items(),
+        launch_arguments={
+            'use_sim_time': use_sim_time,
+            'number_of_follower': '1',
+            'odom_bridge_x': odom_bridge_x,
+            'odom_bridge_y': odom_bridge_y,
+        }.items(),
     )
 
     robot_state_publisher_cmd_list = []

@@ -66,7 +66,9 @@ private:
   bool has_last_sent_goal_;
   bool has_prior_target_pose_;
   bool awaiting_goal_response_;
+  bool applied_initial_step_;
   double follow_distance_;
+  double initial_step_distance_;
   double goal_update_distance_threshold_;
   double goal_update_min_period_sec_;
   rclcpp::Time last_goal_sent_time_;
