@@ -31,6 +31,8 @@ def _launch_setup(context):
     use_sim_time = LaunchConfiguration('use_sim_time')
     number_of_follower = int(LaunchConfiguration('number_of_follower').perform(context))
     use_lidar_bridge = LaunchConfiguration('use_lidar_bridge').perform(context).lower() in ('1', 'true', 'yes')
+    use_map_tracking = LaunchConfiguration('use_map_tracking').perform(context).lower() in ('1', 'true', 'yes')
+    tracking_frame = LaunchConfiguration('tracking_frame').perform(context)
     initial_dx = LaunchConfiguration('initial_dx').perform(context)
     initial_dy = LaunchConfiguration('initial_dy').perform(context)
 
@@ -46,6 +48,7 @@ def _launch_setup(context):
             {'use_sim_time': use_sim_time},
             {'follow_distance': 0.5},
             {'publish_odom_bridge': False},
+            {'tracking_frame': tracking_frame},
         ]
     )
     nodes = []
@@ -53,41 +56,43 @@ def _launch_setup(context):
     for i in range(number_of_follower):
         namespace = f'TB3_{i+2}'
         leader_namespace = f'TB3_{i+1}'
-        if use_lidar_bridge:
-            tf_bridge_node = Node(
-                package='escort_turtlebot_pkg',
-                executable='lidar_odom_bridge',
-                name=f'lidar_odom_bridge_{leader_namespace}_to_{namespace}',
-                output='screen',
-                respawn=True,
-                respawn_delay=2.0,
-                parameters=[
-                    {'use_sim_time': use_sim_time},
-                    {'scan_topic': f'/{namespace}/scan'},
-                    {'leader_ns': leader_namespace},
-                    {'follower_ns': namespace},
-                    {'target_bearing_deg': 0.0},
-                    {'search_half_angle_deg': 35.0},
-                    {'min_range': 0.12},
-                    {'max_range': 3.0},
-                    {'smoothing_alpha': 0.35},
-                    {'min_candidate_points': 3},
-                    {'max_tracking_jump': 0.6},
-                ],
-            )
-        else:
-            tf_bridge_node = Node(
-                package='tf2_ros',
-                executable='static_transform_publisher',
-                name=f'odom_bridge_{leader_namespace}_to_{namespace}',
-                output='screen',
-                arguments=[
-                    str(initial_dx), str(initial_dy), '0',
-                    '0', '0', '0',
-                    f'{leader_namespace}/odom',
-                    f'{namespace}/odom',
-                ],
-            )
+        tf_bridge_node = None
+        if not use_map_tracking:
+            if use_lidar_bridge:
+                tf_bridge_node = Node(
+                    package='escort_turtlebot_pkg',
+                    executable='lidar_odom_bridge',
+                    name=f'lidar_odom_bridge_{leader_namespace}_to_{namespace}',
+                    output='screen',
+                    respawn=True,
+                    respawn_delay=2.0,
+                    parameters=[
+                        {'use_sim_time': use_sim_time},
+                        {'scan_topic': f'/{namespace}/scan'},
+                        {'leader_ns': leader_namespace},
+                        {'follower_ns': namespace},
+                        {'target_bearing_deg': 0.0},
+                        {'search_half_angle_deg': 35.0},
+                        {'min_range': 0.12},
+                        {'max_range': 3.0},
+                        {'smoothing_alpha': 0.35},
+                        {'min_candidate_points': 3},
+                        {'max_tracking_jump': 0.6},
+                    ],
+                )
+            else:
+                tf_bridge_node = Node(
+                    package='tf2_ros',
+                    executable='static_transform_publisher',
+                    name=f'odom_bridge_{leader_namespace}_to_{namespace}',
+                    output='screen',
+                    arguments=[
+                        str(initial_dx), str(initial_dy), '0',
+                        '0', '0', '0',
+                        f'{leader_namespace}/odom',
+                        f'{namespace}/odom',
+                    ],
+                )
 
         custom_ctrl_yaml_path = os.path.join(
             get_package_share_directory('escort_turtlebot_pkg'),
@@ -137,7 +142,8 @@ def _launch_setup(context):
                 (f'/{namespace}/cmd_vel', f'/{namespace}/cmd_vel_not_smoothed'),
                 (f'/{namespace}/cmd_vel_smoothed', f'/{namespace}/cmd_vel')]
         )
-        nodes.append(tf_bridge_node)
+        if tf_bridge_node is not None:
+            nodes.append(tf_bridge_node)
         nodes.append(
             TimerAction(
                 period=3.0,
@@ -169,6 +175,20 @@ def generate_launch_description():
             'use_lidar_bridge',
             default_value='true',
             description='Use LiDAR-based odom bridge instead of static transform'
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'use_map_tracking',
+            default_value='true',
+            description='Track in shared frame (map) and skip odom bridging'
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'tracking_frame',
+            default_value='map',
+            description='Shared frame used by follower path generation'
         )
     )
     ld.add_action(

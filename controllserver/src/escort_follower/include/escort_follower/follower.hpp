@@ -47,7 +47,8 @@ private:
   void send_path();
   bool get_target_pose();
 
-  geometry_msgs::msg::TransformStamped target_pose_;
+  geometry_msgs::msg::TransformStamped leader_pose_in_tracking_frame_;
+  geometry_msgs::msg::TransformStamped follower_pose_in_tracking_frame_;
   geometry_msgs::msg::PoseStamped prior_second_target_pose_;
   geometry_msgs::msg::PoseStamped last_sent_second_target_pose_;
   rclcpp::TimerBase::SharedPtr send_path_timer_;
@@ -63,11 +64,13 @@ private:
   bool use_sim_time_;
   bool publish_odom_bridge_;
   bool has_last_sent_goal_;
+  bool has_prior_target_pose_;
   bool awaiting_goal_response_;
   double follow_distance_;
   double goal_update_distance_threshold_;
   double goal_update_min_period_sec_;
   rclcpp::Time last_goal_sent_time_;
+  std::string tracking_frame_;
 };
 
 #endif  // ESCORT_FOLLOWER__FOLLOWER_HPP_
