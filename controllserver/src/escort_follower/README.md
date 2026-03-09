@@ -9,7 +9,7 @@ C++ package for multi-TurtleBot follower control using TF-relative target genera
 
 ## Build
 ```bash
-cd /home/penguin/escort_ws/controllserver
+cd ~/escort_ws/controllserver
 colcon build --packages-select escort_follower
 source install/setup.bash
 ```
@@ -47,7 +47,7 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
 
 ### 빌드
 ```bash
-cd /home/penguin/escort_ws/controllserver
+cd ~/escort_ws/controllserver
 colcon build --packages-select escort_follower
 source install/setup.bash
 ```
