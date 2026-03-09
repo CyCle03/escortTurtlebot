@@ -45,13 +45,15 @@ public:
 private:
   void tf_publisher();
   void send_path();
-  void get_target_pose();
+  bool get_target_pose();
 
   geometry_msgs::msg::TransformStamped target_pose_;
   geometry_msgs::msg::PoseStamped prior_second_target_pose_;
+  geometry_msgs::msg::PoseStamped last_sent_second_target_pose_;
   rclcpp::TimerBase::SharedPtr send_path_timer_;
   rclcpp::TimerBase::SharedPtr tf_publish_timer_;
   rclcpp_action::Client<nav2_msgs::action::FollowPath>::SharedPtr nav2_action_client_;
+  rclcpp_action::ClientGoalHandle<nav2_msgs::action::FollowPath>::SharedPtr active_goal_handle_;
   std::shared_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_;
   tf2_ros::Buffer tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
@@ -60,7 +62,12 @@ private:
   std::string follower_name_;
   bool use_sim_time_;
   bool publish_odom_bridge_;
+  bool has_last_sent_goal_;
+  bool awaiting_goal_response_;
   double follow_distance_;
+  double goal_update_distance_threshold_;
+  double goal_update_min_period_sec_;
+  rclcpp::Time last_goal_sent_time_;
 };
 
 #endif  // ESCORT_FOLLOWER__FOLLOWER_HPP_

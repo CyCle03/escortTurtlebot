@@ -18,8 +18,8 @@ setup(
     zip_safe=True,
     maintainer='penguin',
     maintainer_email='cherrybear03@naver.com',
-    description='TODO: Package description',
-    license='TODO: License declaration',
+    description='Launch and bridge utilities for TurtleBot escort follower experiments.',
+    license='Apache-2.0',
     extras_require={
         'test': [
             'pytest',

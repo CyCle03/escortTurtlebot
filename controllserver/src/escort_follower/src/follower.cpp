@@ -25,15 +25,25 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   tf_buffer_(this->get_clock()),
   tf_listener_(tf_buffer_),
   leader_name_(leader_name),
-  follower_name_(follower_name)
+  follower_name_(follower_name),
+  has_last_sent_goal_(false),
+  awaiting_goal_response_(false),
+  last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type())
 {
   this->declare_parameter<bool>("publish_odom_bridge", true);
   this->declare_parameter<double>("follow_distance", 0.5);
+  this->declare_parameter<double>("goal_update_distance_threshold", 0.03);
+  this->declare_parameter<double>("goal_update_min_period_sec", 0.3);
   if (!get_parameter("use_sim_time", use_sim_time_)) {
     use_sim_time_ = false;
   }
   get_parameter("publish_odom_bridge", publish_odom_bridge_);
   get_parameter("follow_distance", follow_distance_);
+  get_parameter("goal_update_distance_threshold", goal_update_distance_threshold_);
+  get_parameter("goal_update_min_period_sec", goal_update_min_period_sec_);
+
+  prior_second_target_pose_.pose.orientation.w = 1.0;
+  last_sent_second_target_pose_.pose.orientation.w = 1.0;
 
   if (publish_odom_bridge_) {
     tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -85,21 +95,36 @@ void Follower::tf_publisher()
   this->tf_broadcaster_->sendTransform(tf_msg);
 }
 
-void Follower::get_target_pose()
+bool Follower::get_target_pose()
 {
   try {
     this->target_pose_ = this->tf_buffer_.lookupTransform(
       this->follower_name_ + "/base_footprint",
       this->leader_name_ + "/base_footprint",
       tf2::TimePointZero);
+    return true;
   } catch (const tf2::TransformException & ex) {
-    RCLCPP_WARN(this->get_logger(), "Waiting for TF");
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000, "Waiting for TF");
+    return false;
   }
 }
 
 void Follower::send_path()
 {
-  get_target_pose();
+  if (!get_target_pose()) {
+    return;
+  }
+
+  if (!this->nav2_action_client_->wait_for_action_server(std::chrono::seconds(0))) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 2000, "Action server not available");
+    return;
+  }
+
+  if (awaiting_goal_response_) {
+    return;
+  }
+
   nav_msgs::msg::Path path;
   path.header.stamp = this->get_clock()->now();
   path.header.frame_id = follower_name_ + "/base_footprint";
@@ -132,14 +157,48 @@ void Follower::send_path()
     this->prior_second_target_pose_ = second_target_pose;
   }
 
+  const rclcpp::Time now = this->get_clock()->now();
+  if (has_last_sent_goal_) {
+    const double delta_x =
+      second_target_pose.pose.position.x - last_sent_second_target_pose_.pose.position.x;
+    const double delta_y =
+      second_target_pose.pose.position.y - last_sent_second_target_pose_.pose.position.y;
+    const double delta_distance = std::hypot(delta_x, delta_y);
+    const bool is_small_change = delta_distance < goal_update_distance_threshold_;
+    const bool is_too_soon =
+      (now - last_goal_sent_time_).seconds() < goal_update_min_period_sec_;
+    if (is_small_change || is_too_soon) {
+      return;
+    }
+  }
+
   auto goal_msg = nav2_msgs::action::FollowPath::Goal();
   goal_msg.path = path;
 
-  if (!this->nav2_action_client_->wait_for_action_server(std::chrono::seconds(1))) {
-    RCLCPP_WARN(this->get_logger(), "Action server not available");
-    return;
+  rclcpp_action::Client<nav2_msgs::action::FollowPath>::SendGoalOptions goal_options;
+  goal_options.goal_response_callback =
+    [this](rclcpp_action::ClientGoalHandle<nav2_msgs::action::FollowPath>::SharedPtr goal_handle) {
+      awaiting_goal_response_ = false;
+      active_goal_handle_ = goal_handle;
+      if (!goal_handle) {
+        RCLCPP_WARN(this->get_logger(), "FollowPath goal rejected");
+      }
+    };
+  goal_options.result_callback =
+    [this](const rclcpp_action::ClientGoalHandle<nav2_msgs::action::FollowPath>::WrappedResult &) {
+      active_goal_handle_.reset();
+    };
+
+  if (active_goal_handle_) {
+    this->nav2_action_client_->async_cancel_goal(active_goal_handle_);
+    active_goal_handle_.reset();
   }
-  this->nav2_action_client_->async_send_goal(goal_msg);
+
+  awaiting_goal_response_ = true;
+  last_goal_sent_time_ = now;
+  last_sent_second_target_pose_ = second_target_pose;
+  has_last_sent_goal_ = true;
+  this->nav2_action_client_->async_send_goal(goal_msg, goal_options);
 }
 
 int main(int argc, char * argv[])

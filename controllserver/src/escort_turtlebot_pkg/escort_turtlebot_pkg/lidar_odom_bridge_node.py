@@ -81,6 +81,8 @@ class LidarOdomBridgeNode(Node):
         self.declare_parameter('min_range', 0.12)
         self.declare_parameter('max_range', 3.0)
         self.declare_parameter('smoothing_alpha', 0.35)
+        self.declare_parameter('min_candidate_points', 3)
+        self.declare_parameter('max_tracking_jump', 0.6)
         self.declare_parameter('use_sim_time', False)
 
         scan_topic = self.get_parameter('scan_topic').get_parameter_value().string_value
@@ -95,6 +97,8 @@ class LidarOdomBridgeNode(Node):
         self.min_range = self.get_parameter('min_range').get_parameter_value().double_value
         self.max_range = self.get_parameter('max_range').get_parameter_value().double_value
         self.alpha = self.get_parameter('smoothing_alpha').get_parameter_value().double_value
+        self.min_candidate_points = self.get_parameter('min_candidate_points').get_parameter_value().integer_value
+        self.max_tracking_jump = self.get_parameter('max_tracking_jump').get_parameter_value().double_value
 
         qos = QoSProfile(
             reliability=ReliabilityPolicy.BEST_EFFORT,
@@ -106,6 +110,7 @@ class LidarOdomBridgeNode(Node):
         self.tf_listener = TransformListener(self.tf_buffer, self)
         self.tf_broadcaster = TransformBroadcaster(self)
         self.last_fb_lb: Optional[Tuple[float, float]] = None
+        self.base_frame_cache = {}
 
     def _estimate_leader_in_scan(self, msg: LaserScan) -> Optional[Tuple[float, float]]:
         candidates = []
@@ -116,7 +121,7 @@ class LidarOdomBridgeNode(Node):
             d = math.atan2(math.sin(ang - self.target_bearing), math.cos(ang - self.target_bearing))
             if abs(d) <= self.half_angle:
                 candidates.append((rng, ang))
-        if not candidates:
+        if len(candidates) < int(self.min_candidate_points):
             return None
 
         candidates.sort(key=lambda x: x[0])
@@ -128,6 +133,10 @@ class LidarOdomBridgeNode(Node):
         if self.last_fb_lb is None:
             self.last_fb_lb = (x, y)
         else:
+            dx = x - self.last_fb_lb[0]
+            dy = y - self.last_fb_lb[1]
+            if math.hypot(dx, dy) > self.max_tracking_jump:
+                return self.last_fb_lb
             self.last_fb_lb = (
                 self.alpha * x + (1.0 - self.alpha) * self.last_fb_lb[0],
                 self.alpha * y + (1.0 - self.alpha) * self.last_fb_lb[1],
@@ -143,6 +152,22 @@ class LidarOdomBridgeNode(Node):
         except TransformException:
             return None
 
+    def _lookup_robot_in_odom(self, ns: str, odom_frame: str) -> Optional[Tuple[float, float, float]]:
+        # Real robots may expose different base frames depending on bringup params.
+        candidates = self.base_frame_cache.get(ns, []) or [
+            f'{ns}/base_footprint',
+            f'{ns}/base_link',
+            'base_footprint',
+            'base_link',
+            'base_scan',
+        ]
+        for child in candidates:
+            pose = self._lookup_2d(odom_frame, child)
+            if pose is not None:
+                self.base_frame_cache[ns] = [child]
+                return pose
+        return None
+
     def _scan_cb(self, msg: LaserScan):
         fb_lb = self._estimate_leader_in_scan(msg)
         if fb_lb is None:
@@ -150,11 +175,8 @@ class LidarOdomBridgeNode(Node):
 
         leader_odom = f'{self.leader_ns}/odom'
         follower_odom = f'{self.follower_ns}/odom'
-        leader_base = f'{self.leader_ns}/base_footprint'
-        follower_base = f'{self.follower_ns}/base_footprint'
-
-        lo_lb = self._lookup_2d(leader_odom, leader_base)
-        fo_fb = self._lookup_2d(follower_odom, follower_base)
+        lo_lb = self._lookup_robot_in_odom(self.leader_ns, leader_odom)
+        fo_fb = self._lookup_robot_in_odom(self.follower_ns, follower_odom)
         if lo_lb is None or fo_fb is None:
             return
 
