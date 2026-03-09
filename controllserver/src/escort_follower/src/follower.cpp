@@ -31,10 +31,12 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   has_last_sent_goal_(false),
   has_prior_target_pose_(false),
   awaiting_goal_response_(false),
+  applied_initial_step_(false),
   last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type())
 {
   this->declare_parameter<bool>("publish_odom_bridge", true);
-  this->declare_parameter<double>("follow_distance", 0.3);
+  this->declare_parameter<double>("follow_distance", 0.5);
+  this->declare_parameter<double>("initial_step_distance", 0.5);
   this->declare_parameter<double>("goal_update_distance_threshold", 0.03);
   this->declare_parameter<double>("goal_update_min_period_sec", 0.3);
   this->declare_parameter<std::string>("tracking_frame", "map");
@@ -43,6 +45,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   }
   get_parameter("publish_odom_bridge", publish_odom_bridge_);
   get_parameter("follow_distance", follow_distance_);
+  get_parameter("initial_step_distance", initial_step_distance_);
   get_parameter("goal_update_distance_threshold", goal_update_distance_threshold_);
   get_parameter("goal_update_min_period_sec", goal_update_min_period_sec_);
   get_parameter("tracking_frame", tracking_frame_);
@@ -171,9 +174,17 @@ void Follower::send_path()
 
   const double dx = target_x - follower_x;
   const double dy = target_y - follower_y;
-  if (std::hypot(dx, dy) > 1e-6) {
-    second_target_pose.pose.position.x = target_x;
-    second_target_pose.pose.position.y = target_y;
+  const double target_distance = std::hypot(dx, dy);
+  if (target_distance > 1e-6) {
+    if (!applied_initial_step_ && initial_step_distance_ > 0.0) {
+      const double step = std::min(initial_step_distance_, target_distance);
+      second_target_pose.pose.position.x = follower_x + (dx / target_distance) * step;
+      second_target_pose.pose.position.y = follower_y + (dy / target_distance) * step;
+      applied_initial_step_ = true;
+    } else {
+      second_target_pose.pose.position.x = target_x;
+      second_target_pose.pose.position.y = target_y;
+    }
     tf2::Quaternion quat;
     quat.setRPY(0.0, 0.0, std::atan2(dy, dx));
     second_target_pose.pose.orientation = tf2::toMsg(quat);
