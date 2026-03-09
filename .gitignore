@@ -26,3 +26,6 @@ venv/
 controllserver/build/
 controllserver/install/
 controllserver/log/
+
+# Temporary archive workspace
+tmp/
