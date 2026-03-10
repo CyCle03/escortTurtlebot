@@ -64,14 +64,14 @@ class FollowerDetectorNode(Node):
             transform_scan_to_odom1 = self.tf_buffer.lookup_transform(
                 'TB3_1/odom',
                 'TB3_1/base_scan',
-                msg.header.stamp, rclpy.duration.Duration(seconds=0.5))
+                rclpy.time.Time())
             
             pt_in_odom1 = tf2_geometry_msgs.do_transform_point(pt_in_scan, transform_scan_to_odom1)
 
             transform_odom2_to_base2 = self.tf_buffer.lookup_transform(
                 'TB3_2/odom',
                 'TB3_2/base_footprint',
-                msg.header.stamp, rclpy.duration.Duration(seconds=0.5))
+                rclpy.time.Time())
             
             new_tf = TransformStamped()
             new_tf.header.frame_id = 'TB3_1/odom'
