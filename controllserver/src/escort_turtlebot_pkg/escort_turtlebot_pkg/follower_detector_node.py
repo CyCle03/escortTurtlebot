@@ -14,7 +14,6 @@ class FollowerDetectorNode(Node):
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
-        self.declare_parameter('use_sim_time', False)
         
         self.subscription = self.create_subscription(
             LaserScan,
