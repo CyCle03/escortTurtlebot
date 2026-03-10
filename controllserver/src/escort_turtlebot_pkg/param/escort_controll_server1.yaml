@@ -58,10 +58,10 @@
         RotateToGoal.scale: 10.0
         RotateToGoal.slowing_factor: 5.0
         RotateToGoal.lookahead_time: -1.0
-        ObstacleFootprintCritic.scale: 25.0
+        ObstacleFootprintCritic.scale: 50.0
         ObstacleFootprintCritic.threshold: 0.1
         ObstacleFootprintCritic.include_dynamic_obstacles: true
-        ObstacleFootprintCritic.collision_penalty: 100.0
+        ObstacleFootprintCritic.collision_penalty: 200.0
         ObstacleFootprintCritic.footprint_cost_mode: 0
 /**:
   local_costmap:
@@ -76,7 +76,11 @@
         obstacle_range: 2.5
         raytrace_range: 3.0
         rolling_window: true
-        plugins: ["obstacle_layer"]
+        plugins: ["obstacle_layer", "inflation_layer"]
+        inflation_layer:
+          plugin: "nav2_costmap_2d::InflationLayer"
+          cost_scaling_factor: 3.0
+          inflation_radius: 0.25
         obstacle_layer:
           plugin: "nav2_costmap_2d::ObstacleLayer"
           enabled: true
