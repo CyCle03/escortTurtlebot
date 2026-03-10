@@ -22,6 +22,10 @@ def generate_launch_description():
             'number_of_follower': number_of_follower,
         }.items(),
     )
+    slam_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(launch_dir, 'escort_slam.launch.py')),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
+    )
 
     ld = LaunchDescription()
     ld.add_action(
@@ -39,4 +43,5 @@ def generate_launch_description():
         )
     )
     ld.add_action(core_launch)
+    ld.add_action(slam_launch)
     return ld

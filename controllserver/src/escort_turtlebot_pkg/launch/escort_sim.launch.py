@@ -73,6 +73,10 @@ def _launch_setup(context):
             'leader_initial_move_startup_delay': '2.0',
         }.items(),
     )
+    slam_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(os.path.join(escort_launch_dir, 'escort_slam.launch.py')),
+        launch_arguments={'use_sim_time': use_sim_time}.items(),
+    )
 
     robot_state_publisher_cmd_list = []
     spawn_turtlebot_cmd_list = []
@@ -142,7 +146,7 @@ def _launch_setup(context):
     actions.append(
         TimerAction(
             period=5.0,
-            actions=[core_launch],
+            actions=[core_launch, slam_launch],
         )
     )
 
