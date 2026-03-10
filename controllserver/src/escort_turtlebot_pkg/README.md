@@ -12,6 +12,8 @@ Python launch/bridge integration package for escort simulation and runtime orche
 - Integrates SLAM for the Leader robot:
   - Leader (`TB3_1`) runs `slam_toolbox` to generate a map of the environment.
   - Follower (`TB3_2`) uses LiDAR solely for local obstacle avoidance via Nav2 local costmap.
+- Automatic Follower Detection:
+  - Dynamically calculates the follower's initial position using the leader's LiDAR scan, eliminating the need for exact physical placement.
 
 ## Build
 ```bash
@@ -69,6 +71,8 @@ but keep remapping to `/TB3_1/cmd_vel`.
 - 리더 로봇 중심의 SLAM 통합
   - 리더 로봇(`TB3_1`)은 `slam_toolbox`를 실행하여 맵 생성
   - 팔로워 로봇(`TB3_2`)은 무거운 SLAM 대신 자체 LiDAR 데이터를 활용한 근거리 역동적 장애물 회피(Local Costmap)만 수행
+- 자동 팔로워 거리 인식
+  - 리더의 LiDAR 스캔 데이터를 활용해 팔로워의 초기 위치를 자동 추정하므로, 시작 전 정확한 거리에 로봇을 강제로 배치할 필요가 없음
 
 ### 빌드
 ```bash

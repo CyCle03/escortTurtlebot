@@ -23,11 +23,12 @@
 - **주요 역할**:
   - **시뮬레이션 및 실제 구동 통합**: Gazebo 환경 설정, 지도(SLAM) 작성 여부, 로봇 스폰(Spawn) 등 하드웨어/시뮬레이션 의존적인 실행 환경을 세팅합니다.
   - **이름 충돌 방지(Namespace)**: `TB3_1`, `TB3_2` 등 다수 로봇의 TF 트리, 노드 이름, 토픽들이 충돌하지 않도록 격리(Namespace)하고 연결해 줍니다.
-  - **시나리오 기획(Leader Initial Move)**: "시작 시 리더가 앞으로 0.5m 이동하여 자리를 확보한다"와 같은 고수준의 에스코트 시나리오 노드(`leader_initial_move_node.py`)가 포함되어 있습니다.
+  - **시나리오 기획 및 동적 좌표 변환**: "시작 시 리더가 앞으로 0.5m 이동하여 자리를 확보한다"와 같은 고수준의 에스코트 시나리오 처리(`leader_initial_move_node.py`), 그리고 리더의 라이다를 분석해 팔로워의 초기 위치를 자동으로 찾아 TF를 연결해 주는 노드(`follower_detector_node.py`)가 포함되어 있습니다.
   - **Nav2 시스템 및 SLAM 연동**: `slam_toolbox`, Nav2 모듈들을 불러오고 각 로봇의 파라미터(`escort_controll_server1.yaml`)를 세팅합니다.
 - **주요 파일**: 
   - `launch/escort_sim.launch.py`, `escort_real.launch.py` (시스템 런처)
   - `param/escort_controll_server1.yaml` (Nav2/SLAM 파라미터)
+  - `escort_turtlebot_pkg/follower_detector_node.py` (라이다 기반 팔로워 자동 인식 노드)
 
 ### 🅱️ `escort_follower` (핵심 추종 제어 패키지)
 **"리더를 어떻게 인식하고, 어디를 목표로 주행할 것인가"**에 대한 순수 핵심 수식과 알고리즘이 들어있는 패키지입니다.
