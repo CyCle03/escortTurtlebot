@@ -41,6 +41,7 @@ def generate_launch_description():
     follower = Node(
         package='escort_follower',
         executable='follower',
+        name='TB3_2_follower_node',
         output='screen',
         arguments=['1'],
         parameters=[
