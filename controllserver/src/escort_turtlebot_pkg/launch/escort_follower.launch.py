@@ -68,7 +68,8 @@ def generate_launch_description():
         package='escort_turtlebot_pkg',
         executable='follower_detector_node',
         name='follower_detector_node',
-        output='screen'
+        output='screen',
+        parameters=[{'use_sim_time': use_sim_time}]
     )
 
     leader_initial_move_node = Node(
