@@ -69,8 +69,7 @@ def generate_launch_description():
         executable='static_transform_publisher',
         name='odom_bridge_TB3_1_to_TB3_2',
         output='screen',
-        arguments=[odom_bridge_x, odom_bridge_y, '0', '0', '0', '0', 'TB3_1/odom', 'TB3_2/odom'],
-    )
+
 
     leader_initial_move_node = Node(
         package='escort_turtlebot_pkg',
