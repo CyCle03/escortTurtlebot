@@ -27,6 +27,7 @@ setup(
             # 명령어이름 = 패키지폴더명.파일명:메인함수이름
             'leader_node = team_project.leader_node:main',
             'follower_node = team_project.follower_node:main',
+            'gest = team_project.gesture_turtle:main',
         ],
     },
 )
