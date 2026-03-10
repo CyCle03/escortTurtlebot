@@ -3,10 +3,125 @@
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import TransformStamped, PointStamped
+from geometry_msgs.msg import TransformStamped
 import tf2_ros
 import tf2_geometry_msgs
 import math
+import numpy as np
+from scipy.spatial import cKDTree
+
+def get_transform_matrix_2d(transform_msg):
+    t = transform_msg.transform.translation
+    q = transform_msg.transform.rotation
+    siny_cosp = 2 * (q.w * q.z + q.x * q.y)
+    cosy_cosp = 1 - 2 * (q.y * q.y + q.z * q.z)
+    theta = math.atan2(siny_cosp, cosy_cosp)
+    
+    T = np.identity(3)
+    T[0, 0] = math.cos(theta)
+    T[0, 1] = -math.sin(theta)
+    T[1, 0] = math.sin(theta)
+    T[1, 1] = math.cos(theta)
+    T[0, 2] = t.x
+    T[1, 2] = t.y
+    return T
+
+def matrix_to_transform_msg_2d(T, frame_id, child_frame_id, stamp):
+    msg = TransformStamped()
+    msg.header.stamp = stamp
+    msg.header.frame_id = frame_id
+    msg.child_frame_id = child_frame_id
+    
+    msg.transform.translation.x = float(T[0, 2])
+    msg.transform.translation.y = float(T[1, 2])
+    msg.transform.translation.z = 0.0
+    
+    theta = math.atan2(T[1, 0], T[0, 0])
+    msg.transform.rotation.x = 0.0
+    msg.transform.rotation.y = 0.0
+    msg.transform.rotation.z = math.sin(theta / 2.0)
+    msg.transform.rotation.w = math.cos(theta / 2.0)
+    return msg
+
+def scan_to_points(msg, max_range=4.0):
+    points = []
+    for i, r in enumerate(msg.ranges):
+        if r < msg.range_min or r > min(msg.range_max, max_range) or math.isinf(r) or math.isnan(r):
+            continue
+        ang = msg.angle_min + i * msg.angle_increment
+        x = r * math.cos(ang)
+        y = r * math.sin(ang)
+        points.append([x, y])
+    if len(points) == 0:
+        return np.array([])
+    pts = np.array(points)
+    step = max(1, len(pts) // 150)
+    return pts[::step, :]
+
+def icp(A, B, init_pose, max_iterations=30, tolerance=0.0001):
+    src = np.ones((3, A.shape[0]))
+    src[:2, :] = A.T
+    dst = np.ones((3, B.shape[0]))
+    dst[:2, :] = B.T
+
+    tx, ty, theta = init_pose
+    T = np.array([
+        [np.cos(theta), -np.sin(theta), tx],
+        [np.sin(theta),  np.cos(theta), ty],
+        [0, 0, 1]
+    ])
+    
+    src = np.dot(T, src)
+    prev_error = float('inf')
+    
+    tree = cKDTree(dst[:2, :].T)
+    
+    for i in range(max_iterations):
+        distances, indices = tree.query(src[:2, :].T)
+        valid = distances < 0.4 
+        if np.sum(valid) < 10:
+            break
+            
+        src_valid = src[:2, valid].T
+        dst_valid = dst[:2, indices[valid]].T
+        
+        centroid_A = np.mean(src_valid, axis=0)
+        centroid_B = np.mean(dst_valid, axis=0)
+        
+        AA = src_valid - centroid_A
+        BB = dst_valid - centroid_B
+        
+        H = np.dot(AA.T, BB)
+        U, S, Vt = np.linalg.svd(H)
+        R = np.dot(Vt.T, U.T)
+        
+        if np.linalg.det(R) < 0:
+            Vt[1,:] *= -1
+            R = np.dot(Vt.T, U.T)
+            
+        t = centroid_B.T - np.dot(R, centroid_A.T)
+        
+        T_update = np.identity(3)
+        T_update[:2, :2] = R
+        T_update[:2, 2] = t
+        
+        src = np.dot(T_update, src)
+        T = np.dot(T_update, T)
+        
+        mean_error = np.mean(distances[valid])
+        if abs(prev_error - mean_error) < tolerance:
+            break
+        prev_error = mean_error
+        
+    final_tx = T[0, 2]
+    final_ty = T[1, 2]
+    final_theta = math.atan2(T[1, 0], T[0, 0])
+    
+    distances, _ = tree.query(src[:2, :].T)
+    fitness = np.mean(distances < 0.15) 
+    
+    return np.array([final_tx, final_ty, final_theta]), fitness
+
 
 class FollowerDetectorNode(Node):
     def __init__(self):
@@ -20,14 +135,12 @@ class FollowerDetectorNode(Node):
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
         
-        # 주 방식: 리더(TB3_1)가 뒤를 스캔
         self.subscription1 = self.create_subscription(
             LaserScan,
             '/TB3_1/scan',
             self.scan1_callback,
             rclpy.qos.qos_profile_sensor_data)
             
-        # 보조 방식: 팔로워(TB3_2)가 앞을 스캔
         self.subscription2 = self.create_subscription(
             LaserScan,
             '/TB3_2/scan',
@@ -35,243 +148,101 @@ class FollowerDetectorNode(Node):
             rclpy.qos.qos_profile_sensor_data)
             
         self.latest_odom_tf = None
-        self.latest_scan_stamp = None
-        
-        self.last_tb3_1_detect_time = 0.0
-        self.no_detect_count = 0           # 연속 감지 실패 카운터
+        self.latest_scan1 = None
         self.timer = self.create_timer(0.05, self.publish_tf)
-        self.get_logger().info("Dual follower detector initialized. Waiting for scans...")
+        self.get_logger().info("ICP Scan Matching Follower detector initialized!")
 
     def scan1_callback(self, msg):
-        try:
-            points = []
-            for i, r in enumerate(msg.ranges):
-                if r < msg.range_min or r > msg.range_max or math.isinf(r) or math.isnan(r):
-                    continue
-                ang = msg.angle_min + i * msg.angle_increment
-                # TB3_1 등 뒤 직선 부채꼴 범위 (180도 ± 34도)
-                if abs(ang) > 2.5:
-                    if 0.15 < r < 1.5:
-                        x = r * math.cos(ang)
-                        y = r * math.sin(ang)
-                        # 옆쪽 벽돌(벽면)을 오인식하지 않도록 좌우 폭(y)을 ±35cm로 제한
-                        if abs(y) < 0.35:
-                            points.append((x, y))
-            
-            if not points:
-                self.no_detect_count += 1
-                return
-
-            self.no_detect_count = 0
-            points.sort(key=lambda p: math.hypot(p[0], p[1]))
-            closest = points[0]
-
-            cluster = [p for p in points if math.hypot(p[0]-closest[0], p[1]-closest[1]) < 0.3]
-
-            if len(cluster) < 3:
-                return
-
-            max_x = max(p[0] for p in cluster)
-            min_x = min(p[0] for p in cluster)
-            max_y = max(p[1] for p in cluster)
-            min_y = min(p[1] for p in cluster)
-            if (max_x - min_x) > 0.25 or (max_y - min_y) > 0.25:
-                # 크기가 25cm를 초과하는 거대한 군집(벽이나 기둥 등)은 터틀봇(14cm)이 아니므로 무시
-                return
-
-            # 여기까지 오면 TB3_1 감지 성공
-            self.last_tb3_1_detect_time = self.get_clock().now().nanoseconds / 1e9
-            
-            avg_x = sum(p[0] for p in cluster) / len(cluster)
-            avg_y = sum(p[1] for p in cluster) / len(cluster)
-            
-            dist = math.hypot(avg_x, avg_y)
-            center_dist = dist + 0.07  # 버거 로봇 반지름 보정 (~0.07m)
-            angle = math.atan2(avg_y, avg_x)
-            center_x = center_dist * math.cos(angle)
-            center_y = center_dist * math.sin(angle)
-
-            pt_in_scan = PointStamped()
-            pt_in_scan.header = msg.header
-            pt_in_scan.point.x = center_x
-            pt_in_scan.point.y = center_y
-            pt_in_scan.point.z = 0.0
-
-            self.latest_scan_stamp = msg.header.stamp
-
-            transform_scan_to_odom1 = self.tf_buffer.lookup_transform(
-                'TB3_1/odom',
-                'TB3_1/base_scan',
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.1))
-            
-            pt_in_odom1 = tf2_geometry_msgs.do_transform_point(pt_in_scan, transform_scan_to_odom1)
-
-            transform_odom2_to_base2 = self.tf_buffer.lookup_transform(
-                'TB3_2/odom',
-                'TB3_2/base_footprint',
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.1))
-            
-            new_tf = TransformStamped()
-            new_tf.header.frame_id = 'TB3_1/odom'
-            new_tf.child_frame_id = 'TB3_2/odom'
-            
-            new_tf.transform.translation.x = pt_in_odom1.point.x - transform_odom2_to_base2.transform.translation.x
-            new_tf.transform.translation.y = pt_in_odom1.point.y - transform_odom2_to_base2.transform.translation.y
-            new_tf.transform.translation.z = pt_in_odom1.point.z - transform_odom2_to_base2.transform.translation.z
-            new_tf.transform.rotation.w = 1.0
-            
-            if self.latest_odom_tf is None:
-                self.latest_odom_tf = new_tf
-                self.get_logger().info(f"[Leader] Initial follower detection at distance {dist:.2f}m")
-            else:
-                alpha = 0.25
-                self.latest_odom_tf.transform.translation.x = (
-                    (1 - alpha) * self.latest_odom_tf.transform.translation.x
-                    + alpha * new_tf.transform.translation.x
-                )
-                self.latest_odom_tf.transform.translation.y = (
-                    (1 - alpha) * self.latest_odom_tf.transform.translation.y
-                    + alpha * new_tf.transform.translation.y
-                )
-                self.latest_odom_tf.transform.translation.z = (
-                    (1 - alpha) * self.latest_odom_tf.transform.translation.z
-                    + alpha * new_tf.transform.translation.z
-                )
-
-        except tf2_ros.LookupException as e:
-            pass
-        except tf2_ros.ExtrapolationException as e:
-            pass
-        except Exception as e:
-            pass
+        pts = scan_to_points(msg, max_range=3.5)
+        if len(pts) > 10:
+            self.latest_scan1 = pts
 
     def scan2_callback(self, msg):
-        current_time = self.get_clock().now().nanoseconds / 1e9
-        # 주 방식(TB3_1 스캔) 0.5초 이내에 성공했다면, 보조 로직 스킵
-        if (current_time - self.last_tb3_1_detect_time) < 0.5:
+        if self.latest_scan1 is None:
             return
-
+            
+        pts2 = scan_to_points(msg, max_range=3.5)
+        if len(pts2) < 10:
+            return
+            
         try:
-            points = []
-            for i, r in enumerate(msg.ranges):
-                if r < msg.range_min or r > msg.range_max or math.isinf(r) or math.isnan(r):
-                    continue
-                ang = msg.angle_min + i * msg.angle_increment
-                # TB3_2 정면 직선 부채꼴 범위 (0도 ± 34도)
-                if abs(ang) < 0.6:
-                    if 0.15 < r < 1.5:
-                        x = r * math.cos(ang)
-                        y = r * math.sin(ang)
-                        # 옆쪽 벽돌(벽면)을 오인식하지 않도록 좌우 폭(y)을 ±35cm로 제한
-                        if abs(y) < 0.35:
-                            points.append((x, y))
+            T_odom1_scan1_msg = self.tf_buffer.lookup_transform(
+                'TB3_1/odom', 'TB3_1/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
+            T_odom2_scan2_msg = self.tf_buffer.lookup_transform(
+                'TB3_2/odom', 'TB3_2/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
             
-            if not points:
+            T_odom1_scan1 = get_transform_matrix_2d(T_odom1_scan1_msg)
+            T_odom2_scan2 = get_transform_matrix_2d(T_odom2_scan2_msg)
+            
+            if self.latest_odom_tf is not None:
+                T_odom1_odom2 = get_transform_matrix_2d(self.latest_odom_tf)
+                T_scan1_odom1 = np.linalg.inv(T_odom1_scan1)
+                T_scan1_scan2_guess = T_scan1_odom1 @ T_odom1_odom2 @ T_odom2_scan2
+                init_pose = [T_scan1_scan2_guess[0, 2], T_scan1_scan2_guess[1, 2], math.atan2(T_scan1_scan2_guess[1, 0], T_scan1_scan2_guess[0, 0])]
+            else:
+                # 초기 추정: TB3_2가 TB3_1의 약 0.7m 뒤에 있음
+                init_pose = [-0.7, 0.0, 0.0]
+                
+            T_icp_pose, fitness = icp(pts2, self.latest_scan1, init_pose)
+            
+            if fitness < 0.15:
+                # 매칭 실패 시 너무 낮은 점수면 무시
                 return
-
-            points.sort(key=lambda p: math.hypot(p[0], p[1]))
-            closest = points[0]
-
-            cluster = [p for p in points if math.hypot(p[0]-closest[0], p[1]-closest[1]) < 0.3]
-
-            if len(cluster) < 3:
-                return
+                
+            tx, ty, theta = T_icp_pose
+            T_scan1_scan2 = np.array([
+                [math.cos(theta), -math.sin(theta), tx],
+                [math.sin(theta),  math.cos(theta), ty],
+                [0, 0, 1]
+            ])
             
-            max_x = max(p[0] for p in cluster)
-            min_x = min(p[0] for p in cluster)
-            max_y = max(p[1] for p in cluster)
-            min_y = min(p[1] for p in cluster)
-            if (max_x - min_x) > 0.25 or (max_y - min_y) > 0.25:
-                # 크기가 25cm를 초과하는 거대한 군집(벽이나 기둥 등)은 터틀봇(14cm)이 아니므로 무시
-                return
+            T_scan2_odom2 = np.linalg.inv(T_odom2_scan2)
+            T_odom1_odom2_new = T_odom1_scan1 @ T_scan1_scan2 @ T_scan2_odom2
             
-            avg_x = sum(p[0] for p in cluster) / len(cluster)
-            avg_y = sum(p[1] for p in cluster) / len(cluster)
-            
-            dist = math.hypot(avg_x, avg_y)
-            center_dist = dist + 0.07  # 버거 로봇 반지름 보정 (~0.07m)
-            angle = math.atan2(avg_y, avg_x)
-            center_x = center_dist * math.cos(angle)
-            center_y = center_dist * math.sin(angle)
-
-            pt_in_scan = PointStamped()
-            pt_in_scan.header = msg.header
-            pt_in_scan.point.x = center_x
-            pt_in_scan.point.y = center_y
-            pt_in_scan.point.z = 0.0
-
-            self.latest_scan_stamp = msg.header.stamp
-
-            # TB3_2의 scan 상 포인트를 TB3_2/odom 으로 변환
-            transform_scan2_to_odom2 = self.tf_buffer.lookup_transform(
-                'TB3_2/odom',
-                'TB3_2/base_scan',
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.1))
-            
-            pt_in_odom2 = tf2_geometry_msgs.do_transform_point(pt_in_scan, transform_scan2_to_odom2)
-
-            # TB3_1 의 기준 위치를 알아냄
-            transform_odom1_to_base1 = self.tf_buffer.lookup_transform(
-                'TB3_1/odom',
-                'TB3_1/base_footprint',
-                rclpy.time.Time(),
-                timeout=rclpy.duration.Duration(seconds=0.1))
-            
-            # 수학적 모델:
-            # pt_in_odom2 (TB3_2/odom 기준 TB3_1 위치) == ODOM2 -> TB3_1
-            # transform_odom1_to_base1.translation (TB3_1/odom 기준 TB3_1 위치) == ODOM1 -> TB3_1
-            # ODOM1 -> ODOM2 = (ODOM1 -> TB3_1) - (ODOM2 -> TB3_1)
-            
-            new_tf = TransformStamped()
-            new_tf.header.frame_id = 'TB3_1/odom'
-            new_tf.child_frame_id = 'TB3_2/odom'
-            
-            new_tf.transform.translation.x = transform_odom1_to_base1.transform.translation.x - pt_in_odom2.point.x
-            new_tf.transform.translation.y = transform_odom1_to_base1.transform.translation.y - pt_in_odom2.point.y
-            new_tf.transform.translation.z = transform_odom1_to_base1.transform.translation.z - pt_in_odom2.point.z
-            new_tf.transform.rotation.w = 1.0
+            now = self.get_clock().now().to_msg()
+            new_msg = matrix_to_transform_msg_2d(T_odom1_odom2_new, 'TB3_1/odom', 'TB3_2/odom', now)
             
             if self.latest_odom_tf is None:
-                self.latest_odom_tf = new_tf
-                self.get_logger().info(f"[Follower] Initial leader detection at distance {dist:.2f}m")
+                self.latest_odom_tf = new_msg
+                self.get_logger().info(f"ICP Initialized! Fitness: {fitness:.2f}, distance: {math.hypot(tx, ty):.2f}m")
             else:
-                alpha = 0.25
-                self.latest_odom_tf.transform.translation.x = (
-                    (1 - alpha) * self.latest_odom_tf.transform.translation.x
-                    + alpha * new_tf.transform.translation.x
-                )
-                self.latest_odom_tf.transform.translation.y = (
-                    (1 - alpha) * self.latest_odom_tf.transform.translation.y
-                    + alpha * new_tf.transform.translation.y
-                )
-                self.latest_odom_tf.transform.translation.z = (
-                    (1 - alpha) * self.latest_odom_tf.transform.translation.z
-                    + alpha * new_tf.transform.translation.z
-                )
-
-        except tf2_ros.LookupException as e:
-            pass
-        except tf2_ros.ExtrapolationException as e:
-            pass
+                alpha = 0.5
+                T_curr = get_transform_matrix_2d(self.latest_odom_tf)
+                T_new = get_transform_matrix_2d(new_msg)
+                
+                tx_blend = (1-alpha)*T_curr[0,2] + alpha*T_new[0,2]
+                ty_blend = (1-alpha)*T_curr[1,2] + alpha*T_new[1,2]
+                
+                th_curr = math.atan2(T_curr[1,0], T_curr[0,0])
+                th_new = math.atan2(T_new[1,0], T_new[0,0])
+                
+                diff = th_new - th_curr
+                while diff > math.pi: diff -= 2*math.pi
+                while diff < -math.pi: diff += 2*math.pi
+                th_blend = th_curr + alpha * diff
+                
+                T_blend = np.array([
+                    [math.cos(th_blend), -math.sin(th_blend), tx_blend],
+                    [math.sin(th_blend),  math.cos(th_blend), ty_blend],
+                    [0, 0, 1]
+                ])
+                
+                self.latest_odom_tf = matrix_to_transform_msg_2d(T_blend, 'TB3_1/odom', 'TB3_2/odom', now)
+                
         except Exception as e:
             pass
 
     def publish_tf(self):
         now = self.get_clock().now().to_msg()
         if self.latest_odom_tf is not None:
-            # Nav2 컨트롤러가 'Transform data too old' 에러를 뱉지 않도록 현재 시간(now)으로 스탬프 갱신
             self.latest_odom_tf.header.stamp = now
             self.tf_broadcaster.sendTransform(self.latest_odom_tf)
         else:
-            # 초기 감지 전 fallback: TB3_1 뒤쪽 0.4m
             new_tf = TransformStamped()
             new_tf.header.frame_id = 'TB3_1/odom'
             new_tf.header.stamp = now
             new_tf.child_frame_id = 'TB3_2/odom'
-            new_tf.transform.translation.x = -0.4
+            new_tf.transform.translation.x = -0.7
             new_tf.transform.rotation.w = 1.0
             self.tf_broadcaster.sendTransform(new_tf)
 
