@@ -52,3 +52,60 @@ graph TD;
 2. **Scan Matching**: `follower_detector_node` receives both robots' scans, runs ICP, and updates the `TB3_2/odom` TF.
 3. **Target Pose Generation**: `Follower` class (in `escort_follower` package) reads the real-time TF. It looks at the leader's heading, computes a target spot exactly `0.5m` behind the leader, and sends a `FollowPath` Action to `TB3_2/follow_path`.
 4. **Local Planning**: The Nav2 stack on TB3_2 computes the motor velocities to reach that spot while dodging local obstacles (people, boxes) that appear on its own LiDAR.
+
+---
+
+## 한국어 안내 (System Architecture & TF Tree)
+
+이 문서는 **escort_turtlebot_pkg** 프로젝트의 아키텍처와 다중 로봇 실시간 제어 원리에 대해 심도 있게 다룹니다.
+
+### 하이브리드(Hybrid) 팔로워 아키텍처
+
+기존의 다중 로봇 추종 시스템은 대개 다음 두 가지 중 하나를 사용합니다:
+1. 단순 오도메트리(Odometry) 추적: 누적 오차(Drift error)에 매우 취약함.
+2. 글로벌 맵이 없는 순수 비전/LiDAR 추종: 글로벌 경로 탐색(A* 등)이 불가능함.
+
+본 프로젝트는 두 방식의 장점을 합친 **하이브리드 아키텍처**를 사용합니다:
+- **리더 (TB3_1)**: 전체 맵(SLMA)을 생성하거나 기존 맵 위에서 글로벌 내비게이션(`slam_toolbox`)을 수행합니다.
+- **팔로워 (TB3_2)**: 무거운 SLAM 노드를 띄우지 않습니다. 대신 리더가 만든 맵을 공유하며, 자신의 LiDAR는 오직 **로컬 코스트맵 (동적 장애물 회피)** 용도로만 사용합니다.
+- **`follower_detector_node`**: 두 로봇의 가교 역할을 합니다. 양쪽 로봇의 LiDAR 스캔이 만들어내는 물리적 윤곽선을 겹쳐보는 방식(**ICP Scan Matching**)으로 두 로봇의 주행 기록(`odom`)을 오차 없이 실시간 동기화합니다.
+
+#### 지능형 예외 상황 복구 행동 (Recovery Behavior)
+장애물에 가려지거나 네트워크 지연으로 인해 팔로워가 리더의 위치 정보(TF)를 놓칠 경우, 팔로워는 즉시 다음과 같은 **복구 모드**에 돌입합니다:
+- 현재 진행 중이던 내비게이션 추종 목표를 취소합니다.
+- 리더가 마지막으로 목격되었던 가장 확실한 좌표로 새로운 목표점을 설정하여 이동하고, 그 자리에 정지하여 대기합니다.
+- 네트워크나 시야가 회복되어 리더 TF가 다시 잡히면, 그 순간부터 즉각적으로 추종을 재개합니다.
+
+### TF(Transform) 트리 구조
+
+ROS 2 내비게이션에서 가장 중요한 것은 TF(좌표계 변환)입니다. 이 시스템은 ICP 보정을 통해 서로 독립된 두 대의 로봇을 하나의 `map` 프레임 아래로 통합합니다.
+
+```mermaid
+graph TD;
+    map-->TB3_1/odom;
+    
+    %% Leader Branch
+    TB3_1/odom-->TB3_1/base_footprint;
+    TB3_1/base_footprint-->TB3_1/base_link;
+    TB3_1/base_link-->TB3_1/base_scan;
+    
+    %% Follower Branch bridged by follower_detector_node
+    TB3_1/odom-. "follower_detector_node (ICP 보정)" .->TB3_2/odom;
+    
+    TB3_2/odom-->TB3_2/base_footprint;
+    TB3_2/base_footprint-->TB3_2/base_link;
+    TB3_2/base_link-->TB3_2/base_scan;
+```
+
+#### 핵심 구성 요소
+
+1. **`map`**: 리더 로봇의 SLAM이 만들어낸 전역 좌표계.
+2. **`TB3_1/odom`**: 리더 로봇의 바퀴 회전량(추측 항법) 기준점.
+3. **`TB3_1/odom` -> `TB3_2/odom`**: `follower_detector_node`가 10Hz로 쏴주는 동적 TF입니다. `TB3_1/scan`과 `TB3_2/scan`을 정합하여 두 로봇 간의 오프셋을 계산하며, 이 덕분에 팔로워 로봇 바퀴의 미끄러짐(Drift) 오차가 실시간으로 깔끔하게 보정됩니다.
+
+### 팔로워 노드의 동작 흐름 (Action Flow)
+
+1. **리더 조종**: 사용자가 `/TB3_1/cmd_vel`로 명령을 내립니다.
+2. **스캔 매칭**: `follower_detector_node`가 양쪽 LiDAR를 스캔하여 오차를 수정한 `TB3_2/odom` TF를 업데이트합니다.
+3. **목표점 생성**: (`escort_follower` 패키지의) `Follower` 클래스가 실시간 TF를 읽고, 리더의 진행 방향을 계산하여 정확히 0.5m 뒤의 위치를 찍은 다음 `TB3_2/follow_path` 액션을 호출합니다.
+4. **로컬 플래닝**: 팔로워 로봇의 Nav2 스택이 자신의 LiDAR에 찍히는 주변 장애물(사람, 박스)을 피하면서 목표점까지 가는 최적의 모터 속도를 계산하여 주행합니다.
