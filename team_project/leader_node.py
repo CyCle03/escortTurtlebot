@@ -1,28 +1,23 @@
 import rclpy
-from team_project.gesture_turtle import GestureTurtle
+from team_project.gesture_turtle import EscortGestureMaskNode
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
-import math
 import cv2
 
-class LeaderNode(GestureTurtle):
+class LeaderNode(EscortGestureMaskNode):
     def __init__(self):
-        super().__init__(node_name='leader_node')
-        self.follow_distance = 3.0
-        
+        super().__init__()
+        # 리더의 현재 odom 위치 구독
         self.create_subscription(Odometry, '/leader/odom', self.odom_callback, 10)
-        self.pos_pub = self.create_publisher(Point, '/leader/relative_pos', 10)
-        self.get_logger().info(f'Leader Node 가동 중... 추종 거리: {self.follow_distance}m')
+        # 리더의 위치 좌표를 발행할 토픽
+        self.pos_pub = self.create_publisher(Point, '/leader/path_pos', 10)
+        self.get_logger().info('Leader Node 가동 중... 경로 데이터 발행 시작')
 
     def odom_callback(self, msg):
-        x = msg.pose.pose.position.x
-        y = msg.pose.pose.position.y
-        q = msg.pose.pose.orientation
-        yaw = math.atan2(2*(q.w*q.z + q.x*q.y), 1-2*(q.y*q.y + q.z*q.z))
-        
+        # 리더의 현재 위치(x, y)를 그대로 전송
         target = Point()
-        target.x = x - self.follow_distance * math.cos(yaw)
-        target.y = y - self.follow_distance * math.sin(yaw)
+        target.x = msg.pose.pose.position.x
+        target.y = msg.pose.pose.position.y
         target.z = 0.0
         self.pos_pub.publish(target)
 
@@ -34,6 +29,8 @@ def main(args=None):
     except KeyboardInterrupt:
         pass
     finally:
+        if hasattr(node, 'cap'):
+            node.cap.release()
         cv2.destroyAllWindows()
         node.destroy_node()
         rclpy.shutdown()

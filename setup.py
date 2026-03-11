@@ -28,6 +28,7 @@ setup(
             'leader_node = team_project.leader_node:main',
             'follower_node = team_project.follower_node:main',
             'gest = team_project.gesture_turtle:main',
+            
         ],
     },
 )
