@@ -1,5 +1,5 @@
 import rclpy
-from team_project.gesture_turtle import EscortGestureMaskNode
+#from team_project.gesture_turtle import EscortGestureMaskNode
 from geometry_msgs.msg import Point
 from nav_msgs.msg import Odometry
 import cv2
