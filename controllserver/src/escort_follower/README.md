@@ -34,6 +34,8 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
   Minimum interval between consecutive goals.
 - `use_sim_time` (bool, default: `false`)
   Use simulation clock.
+- `tf_timeout_sec` (double, default: `2.0`)
+  Time (in seconds) to wait after losing the leader's TF before entering Recovery Mode (Wait at last known position).
 
 ## Notes
 - TF lookup failures are skipped safely (no stale goal resend on TF miss).
@@ -69,6 +71,7 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py follow_distance:=0.5 
 - `goal_update_distance_threshold` (기본값 `0.03`): 새 goal 전송을 위한 최소 목표 변화량
 - `goal_update_min_period_sec` (기본값 `0.3`): goal 전송 최소 주기(초)
 - `use_sim_time` (기본값 `false`): 시뮬레이션 시간 사용 여부
+- `tf_timeout_sec` (기본값 `2.0`): 리더의 위치(TF)를 잃어버렸을 때 복구 모드(마지막 위치 찾기)로 진입하기까지 대기하는 시간(초)
 
 ### 참고
 - TF 조회 실패 시 goal 전송을 건너뛰도록 처리되어 있습니다.

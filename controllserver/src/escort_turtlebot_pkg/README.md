@@ -14,6 +14,9 @@ Python launch/bridge integration package for escort simulation and runtime orche
 - Automatic Follower Detection (`follower_detector_node`):
   - Dynamically calculates the follower's initial position and relative pose using ICP (Iterative Closest Point) algorithm on LiDAR scans.
   - Synchronizes the `/TB3_1/odom` and `/TB3_2/odom` coordinate frames in real-time, eliminating the need for exact initial placement.
+- Intelligent Recovery Behavior (`Wait at Last Known Position`):
+  - If the leader (`TB3_1`) is occluded or TF tracking is lost, the follower (`TB3_2`) cancels its current goal.
+  - The follower navigates to the leader's actual last known position and waits until TF tracking is restored, avoiding erratic maneuvers.
 
 ## Nodes Overview
 
@@ -96,6 +99,9 @@ but keep remapping to `/TB3_1/cmd_vel`.
 - ICP 스캔 매칭 기반 실시간 위치 추적 (`follower_detector_node`)
   - 리더(`TB3_1`)와 팔로워(`TB3_2`)의 LiDAR 스캔(`LaserScan`) 데이터를 ICP 알고리즘으로 매칭하여 두 로봇 간의 상대 위치를 실시간으로 정밀하게 계산
   - 시작 시 정확한 위치에 로봇을 배치할 필요가 없으며, 지속적으로 `TB3_2/odom` 좌표계를 `TB3_1/odom` 보정하여 위치 오차를 줄임
+- 지능형 예외 상황 복구 행동 (`Wait at Last Known Position`)
+  - 통신 단절이나 장애물 가림(Occlusion) 등으로 리더 로봇(`TB3_1`)의 위치 정보(TF)를 놓칠 경우, 팔로워(`TB3_2`)는 즉시 추종을 멈춥니다.
+  - 이후 리더 로봇이 마지막으로 목격되었던 정확한 위치로 이동하여 대기하다가, 리더가 다시 발견되면 자동으로 에스코트 주행을 재개합니다.
 
 ### 주요 노드 (Nodes Overview)
 
