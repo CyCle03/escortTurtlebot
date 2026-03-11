@@ -49,6 +49,7 @@ private:
 
   geometry_msgs::msg::TransformStamped leader_pose_in_tracking_frame_;
   geometry_msgs::msg::TransformStamped follower_pose_in_tracking_frame_;
+  geometry_msgs::msg::TransformStamped last_known_leader_pose_;
   geometry_msgs::msg::PoseStamped prior_second_target_pose_;
   geometry_msgs::msg::PoseStamped last_sent_second_target_pose_;
   rclcpp::TimerBase::SharedPtr send_path_timer_;
@@ -71,7 +72,10 @@ private:
   double initial_step_distance_;
   double goal_update_distance_threshold_;
   double goal_update_min_period_sec_;
+  double tf_timeout_sec_;
   rclcpp::Time last_goal_sent_time_;
+  rclcpp::Time last_tf_success_time_;
+  bool is_in_recovery_mode_;
   std::string tracking_frame_;
 };
 

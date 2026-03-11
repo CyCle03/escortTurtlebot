@@ -32,13 +32,16 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   has_prior_target_pose_(false),
   awaiting_goal_response_(false),
   applied_initial_step_(false),
-  last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type())
+  last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
+  last_tf_success_time_(0, 0, this->get_clock()->get_clock_type()),
+  is_in_recovery_mode_(false)
 {
   this->declare_parameter<bool>("publish_odom_bridge", true);
   this->declare_parameter<double>("follow_distance", 0.5);
   this->declare_parameter<double>("initial_step_distance", 0.0);
   this->declare_parameter<double>("goal_update_distance_threshold", 0.03);
   this->declare_parameter<double>("goal_update_min_period_sec", 0.3);
+  this->declare_parameter<double>("tf_timeout_sec", 2.0);
   this->declare_parameter<std::string>("tracking_frame", "map");
   if (!get_parameter("use_sim_time", use_sim_time_)) {
     use_sim_time_ = false;
@@ -48,6 +51,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   get_parameter("initial_step_distance", initial_step_distance_);
   get_parameter("goal_update_distance_threshold", goal_update_distance_threshold_);
   get_parameter("goal_update_min_period_sec", goal_update_min_period_sec_);
+  get_parameter("tf_timeout_sec", tf_timeout_sec_);
   get_parameter("tracking_frame", tracking_frame_);
 
   prior_second_target_pose_.pose.orientation.w = 1.0;
@@ -105,28 +109,55 @@ void Follower::tf_publisher()
 
 bool Follower::get_target_pose()
 {
+  bool leader_ok = false;
   try {
     this->leader_pose_in_tracking_frame_ = this->tf_buffer_.lookupTransform(
       tracking_frame_,
       this->leader_name_ + "/base_footprint",
       tf2::TimePointZero);
+    
+    this->last_known_leader_pose_ = this->leader_pose_in_tracking_frame_;
+    this->last_tf_success_time_ = this->get_clock()->now();
+    if (this->is_in_recovery_mode_) {
+      RCLCPP_INFO(this->get_logger(), "Leader found! Exiting recovery mode.");
+      this->is_in_recovery_mode_ = false;
+    }
+    leader_ok = true;
+  } catch (const tf2::TransformException & ex) {
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 2000,
+      "Waiting for leader TF in tracking frame '%s'", tracking_frame_.c_str());
+  }
+
+  try {
     this->follower_pose_in_tracking_frame_ = this->tf_buffer_.lookupTransform(
       tracking_frame_,
       this->follower_name_ + "/base_footprint",
       tf2::TimePointZero);
-    return true;
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000,
-      "Waiting for TF in tracking frame '%s'", tracking_frame_.c_str());
+      "Waiting for follower TF in tracking frame '%s'", tracking_frame_.c_str());
     return false;
   }
+
+  return leader_ok;
 }
 
 void Follower::send_path()
 {
-  if (!get_target_pose()) {
-    return;
+  bool leader_visible = get_target_pose();
+  bool trigger_recovery_now = false;
+
+  if (!leader_visible) {
+    double time_since_last_success = (this->get_clock()->now() - last_tf_success_time_).seconds();
+    if (time_since_last_success > tf_timeout_sec_ && !is_in_recovery_mode_ && last_tf_success_time_.nanoseconds() > 0) {
+      RCLCPP_WARN(this->get_logger(), "Leader lost for %.1f sec! Entering Recovery Mode.", time_since_last_success);
+      is_in_recovery_mode_ = true;
+      trigger_recovery_now = true;
+    } else {
+      return;
+    }
   }
 
   if (!this->nav2_action_client_->wait_for_action_server(std::chrono::seconds(0))) {
@@ -158,41 +189,50 @@ void Follower::send_path()
   geometry_msgs::msg::PoseStamped second_target_pose;
   second_target_pose.header.stamp = this->get_clock()->now();
   second_target_pose.header.frame_id = tracking_frame_;
-  const double leader_x = this->leader_pose_in_tracking_frame_.transform.translation.x;
-  const double leader_y = this->leader_pose_in_tracking_frame_.transform.translation.y;
+
   const double follower_x = this->follower_pose_in_tracking_frame_.transform.translation.x;
   const double follower_y = this->follower_pose_in_tracking_frame_.transform.translation.y;
-  const auto & leader_q_msg = this->leader_pose_in_tracking_frame_.transform.rotation;
-  tf2::Quaternion leader_q;
-  tf2::fromMsg(leader_q_msg, leader_q);
-  const double leader_yaw = tf2::getYaw(leader_q);
 
-  // Hybrid target generation:
-  // Use the leader heading and place target at "follow_distance" behind leader.
-  const double target_x = leader_x - this->follow_distance_ * std::cos(leader_yaw);
-  const double target_y = leader_y - this->follow_distance_ * std::sin(leader_yaw);
-
-  const double dx = target_x - follower_x;
-  const double dy = target_y - follower_y;
-  const double target_distance = std::hypot(dx, dy);
-  if (target_distance > 1e-6) {
-    if (!applied_initial_step_ && initial_step_distance_ > 0.0) {
-      const double step = std::min(initial_step_distance_, target_distance);
-      second_target_pose.pose.position.x = follower_x + (dx / target_distance) * step;
-      second_target_pose.pose.position.y = follower_y + (dy / target_distance) * step;
-      applied_initial_step_ = true;
-    } else {
-      second_target_pose.pose.position.x = target_x;
-      second_target_pose.pose.position.y = target_y;
-    }
-    tf2::Quaternion quat;
-    quat.setRPY(0.0, 0.0, std::atan2(dy, dx));
-    second_target_pose.pose.orientation = tf2::toMsg(quat);
+  if (trigger_recovery_now) {
+    second_target_pose.pose.position.x = this->last_known_leader_pose_.transform.translation.x;
+    second_target_pose.pose.position.y = this->last_known_leader_pose_.transform.translation.y;
+    second_target_pose.pose.orientation = this->last_known_leader_pose_.transform.rotation;
   } else {
-    second_target_pose.pose.position.x = follower_x;
-    second_target_pose.pose.position.y = follower_y;
-    second_target_pose.pose.orientation = this->follower_pose_in_tracking_frame_.transform.rotation;
+    // Normal hybrid target generation
+    const double leader_x = this->leader_pose_in_tracking_frame_.transform.translation.x;
+    const double leader_y = this->leader_pose_in_tracking_frame_.transform.translation.y;
+    const auto & leader_q_msg = this->leader_pose_in_tracking_frame_.transform.rotation;
+    tf2::Quaternion leader_q;
+    tf2::fromMsg(leader_q_msg, leader_q);
+    const double leader_yaw = tf2::getYaw(leader_q);
+
+    const double target_x = leader_x - this->follow_distance_ * std::cos(leader_yaw);
+    const double target_y = leader_y - this->follow_distance_ * std::sin(leader_yaw);
+
+    const double dx = target_x - follower_x;
+    const double dy = target_y - follower_y;
+    const double target_distance = std::hypot(dx, dy);
+    
+    if (target_distance > 1e-6) {
+      if (!applied_initial_step_ && initial_step_distance_ > 0.0) {
+        const double step = std::min(initial_step_distance_, target_distance);
+        second_target_pose.pose.position.x = follower_x + (dx / target_distance) * step;
+        second_target_pose.pose.position.y = follower_y + (dy / target_distance) * step;
+        applied_initial_step_ = true;
+      } else {
+        second_target_pose.pose.position.x = target_x;
+        second_target_pose.pose.position.y = target_y;
+      }
+      tf2::Quaternion quat;
+      quat.setRPY(0.0, 0.0, std::atan2(dy, dx));
+      second_target_pose.pose.orientation = tf2::toMsg(quat);
+    } else {
+      second_target_pose.pose.position.x = follower_x;
+      second_target_pose.pose.position.y = follower_y;
+      second_target_pose.pose.orientation = this->follower_pose_in_tracking_frame_.transform.rotation;
+    }
   }
+
   path.poses.push_back(second_target_pose);
   this->prior_second_target_pose_ = second_target_pose;
   has_prior_target_pose_ = true;
