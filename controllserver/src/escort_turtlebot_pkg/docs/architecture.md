@@ -19,6 +19,20 @@ If the follower loses sight of the leader or the TF drops (due to occlusion or n
 - The follower sends a new static goal to the **last known position** of the leader and waits there.
 - Once the TF/network is restored and the leader is detected again, the follower smoothly resumes tracking from that spot.
 
+### Map Stability Protection (ICP Guard)
+
+When TB3_2 gets stuck behind an obstacle its wheels slip, causing odometry drift. If ICP runs in this state, the two LiDAR scans see different environments and produce a falsely large TF correction — which can cause the SLAM map to explode radially.
+
+To prevent this, the `follower_detector_node` applies three layered guards:
+
+| Guard | Trigger | Action |
+|---|---|---|
+| **Stationary detection** | TB3_2 odom change < `odom_motion_threshold` (0.02 m) | Skip ICP entirely |
+| **Correction size limit** | ICP result deviates > `max_correction_dist` (0.3 m) or `max_correction_angle` (0.5 rad) from current TF | Reject ICP result |
+| **Leader scan timeout** | No `/TB3_1/scan` for > `scan1_timeout_sec` (1.0 s) | Preserve last valid bridge TF |
+
+Additionally, `slam_toolbox` is configured conservatively (`loop_match_maximum_variance_coarse: 1.5`) to reject ambiguous loop closures, which are the direct cause of radial map explosions.
+
 ## The TF Tree Structure
 
 In ROS 2 Navigation, Transforms (TF) are critical. Our multi-robot system unifies two separate robots under a single `map` frame using dynamic ICP correction.
@@ -75,6 +89,20 @@ graph TD;
 - 현재 진행 중이던 내비게이션 추종 목표를 취소합니다.
 - 리더가 마지막으로 목격되었던 가장 확실한 좌표로 새로운 목표점을 설정하여 이동하고, 그 자리에 정지하여 대기합니다.
 - 네트워크나 시야가 회복되어 리더 TF가 다시 잡히면, 그 순간부터 즉각적으로 추종을 재개합니다.
+
+#### 맵 안정성 보호 (ICP Guard)
+
+TB3_2가 장애물에 막히면 바퀴가 미끄러지며 오도메트리가 드리프트합니다. 이 상태에서 ICP가 실행되면 두 LiDAR가 서로 다른 환경을 보게 되어 크게 잘못된 TF 보정값이 생성되고, SLAM 맵이 방사형으로 폭발적으로 오염될 수 있습니다.
+
+이를 방지하기 위해 `follower_detector_node`는 세 단계의 보호 로직을 적용합니다:
+
+| 보호 단계 | 트리거 조건 | 동작 |
+|---|---|---|
+| **정지 상태 감지** | TB3_2 odom 변화량 < `odom_motion_threshold` (0.02 m) | ICP 전체 건너뜀 |
+| **보정 크기 제한** | ICP 결과가 현재 TF 대비 > `max_correction_dist` (0.3 m) 또는 `max_correction_angle` (0.5 rad) | ICP 결과 reject |
+| **리더 스캔 타임아웃** | `/TB3_1/scan`이 `scan1_timeout_sec` (1.0 s) 이상 없음 | 마지막 유효 bridge TF 보존 |
+
+또한 `slam_toolbox`를 보수적으로 설정하여(`loop_match_maximum_variance_coarse: 1.5`) 잘못된 루프 클로저(방사형 맵 폭발의 직접 원인)를 원천 차단합니다.
 
 ### TF(Transform) 트리 구조
 

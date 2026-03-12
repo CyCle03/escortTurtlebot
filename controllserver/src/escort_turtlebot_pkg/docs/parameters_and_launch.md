@@ -46,8 +46,40 @@ The `dwb_core::DWBLocalPlanner` on the follower is specifically tuned for smooth
 
 The `follower_detector_node` performs ICP (Iterative Closest Point) scan matching to synchronize the `TB3_1/odom` and `TB3_2/odom` coordinate frames in real-time.
 
+### ICP Quality & Blending
+
 - `icp_fitness_threshold` (`0.3`): Minimum ICP match quality score (0–1) required to accept a new TF estimate. Raise this value if false-positive matches cause unstable tracking; lower it in low-feature environments. Default was `0.15`, raised to `0.3` for better robustness in real-world use.
 - `blend_alpha` (`0.5`): Blending ratio between the previous TF estimate and the new ICP result. `0.0` means no update (keep old), `1.0` means fully adopt the new ICP result. Increase toward `0.7` for faster responsiveness; decrease toward `0.3` for smoother filtering.
+
+### Map Corruption Protection
+
+These parameters guard against map instability when TB3_2 gets stuck or the leader disappears:
+
+- `max_correction_dist` (`0.3` m): If the new ICP result deviates more than this distance from the current bridge TF, it is **rejected** as a likely false match. Prevents sudden large TF jumps from corrupting the SLAM map.
+- `max_correction_angle` (`0.5` rad ≈ 28°): Same as above, but for angular deviation. Keeps the bridge TF from rotating wildly.
+- `odom_motion_threshold` (`0.02` m): If the estimated init_pose change between consecutive ICP callbacks is less than this, TB3_2 is considered **stationary** (e.g., stuck behind an obstacle). ICP is skipped entirely in this state to prevent mismatched scans from polluting the map.
+- `scan1_timeout_sec` (`1.0` s): If no `/TB3_1/scan` message is received for this duration (leader LiDAR lost), ICP is skipped and the last valid bridge TF is preserved.
+
+**Protection flow summary:**
+```
+TB3_2 stuck behind obstacle
+  → odom_motion_threshold not exceeded  → Skip ICP entirely          ✅
+  → ICP runs but result jumps > 0.3 m   → Reject ICP result          ✅
+  → TB3_1 scan disappears > 1.0 s       → Preserve last valid TF     ✅
+```
+
+---
+
+## SLAM Toolbox Parameters (`param/slam_toolbox_params.yaml`)
+
+The SLAM node runs only on the leader (`TB3_1`). Parameters are tuned conservatively to avoid map corruption caused by TF instability from the follower bridge.
+
+| Parameter | Value | Rationale |
+|---|---|---|
+| `transform_timeout` | `0.5` s | Tolerates brief TF gaps without forcing map regeneration (was `0.2`). |
+| `map_update_interval` | `3.0` s | Reduces map write frequency, limiting damage during unstable TF periods (was `2.0`). |
+| `minimum_travel_distance` | `0.5` m | Only adds a new scan node after sufficient movement, reducing noise scans (was `0.3`). |
+| `loop_match_maximum_variance_coarse` | `1.5` | ⭐ Tightens loop closure acceptance. The radial map explosion seen when TB3_2 gets stuck is caused by incorrect loop closures — this directly reduces that risk (was `3.0`). |
 
 ---
 
@@ -89,8 +121,38 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 ICP 스캔 매칭으로 `TB3_1/odom`과 `TB3_2/odom` 좌표계를 실시간 동기화하는 노드의 파라미터입니다.
 
+#### ICP 품질 및 혼합 비율
+
 - `icp_fitness_threshold` (`0.3`): ICP 매칭 결과를 수용하기 위한 최소 품질 점수(0~1). 허위 매칭(False-positive)으로 위치가 불안정하면 이 값을 높이고, 특징이 적은 환경에서는 낮추세요. 기존 `0.15`에서 실환경 안정성을 위해 `0.3`으로 상향되었습니다.
-- `blend_alpha` (`0.5`): 이전 TF 추정값과 새 ICP 결과를 혼합하는 비율. `0.0`이면 업데이트 없음(이전값 유지), `1.0`이면 ICP 결과를 그대로 사용합니다. 응답성을 높이려면 `0.7`로 올리고, 더 부드러운 필터링을 원하면 `0.3`으로 낮추세요.
+- `blend_alpha` (`0.5`): 이전 TF 추정값과 새 ICP 결과를 혼합하는 비율. `0.0`이면 업데이트 없음(이전값 유지), `1.0`이면 ICP 결과를 그대로 사용합니다. 응답성을 높이려면 `0.7`로, 더 부드러운 필터링을 원하면 `0.3`으로 조정하세요.
+
+#### 맵 오염 방지 (Map Corruption Protection)
+
+TB3_2가 장애물에 막히거나 리더가 잠시 소실될 때 맵이 쉽게 오염되는 현상을 방지하는 파라미터입니다:
+
+- `max_correction_dist` (`0.3` m): 새 ICP 결과가 현재 bridge TF와 이 거리 이상 차이 나면 **reject**합니다. 급격한 TF 점프가 SLAM 맵을 오염하는 것을 차단합니다.
+- `max_correction_angle` (`0.5` rad ≈ 28°): ICP 결과의 각도 편이가 이 값 이상이면 reject합니다. bridge TF가 급자기 크게 회전하는 상황을 방지합니다.
+- `odom_motion_threshold` (`0.02` m): ICP 콜백 간 init_pose 변화량이 이 값 이하면 TB3_2가 **정지**한 것으로 판단하고 ICP를 완전히 건너뜁니다. 장애물에 막힌 상태에서 두 로봇의 스캔 환경이 달라지면 ICP가 엉뚱한 결과를 낼 수 있기 때문입니다.
+- `scan1_timeout_sec` (`1.0` s): `/TB3_1/scan` 메시지가 이 시간 이상 수신되지 않으면 (리더 LiDAR 소실) ICP를 건너뛰고 마지막 유효 bridge TF를 보존합니다.
+
+**보호 동작 흐름:**
+```
+TB3_2 장애물에 막힌 상황
+  → odom 변화량 < 0.02 m         → ICP 전체 건너뜀       ✅
+  → ICP 결과가 0.3 m 이상 점프    → ICP 결과 reject       ✅
+  → TB3_1 스캔 1.0s 이상 없음  → 마지막 TF 보존       ✅
+```
+
+### SLAM Toolbox 파라미터 (`param/slam_toolbox_params.yaml`)
+
+SLAM은 리더 (`TB3_1`)에서만 실행됩니다. 팔로워 bridge TF 불안정에 의한 맵 오염을 최소화하도록 보수적으로 튜닝되었습니다.
+
+| 파라미터 | 값 | 변경 이유 |
+|---|---|---|
+| `transform_timeout` | `0.5` s | 일시적 TF 끊김에도 SLAM이 맵을 재생성하지 않도록 내성 향상 (이전 `0.2`) |
+| `map_update_interval` | `3.0` s | 맵 쓰기 빈도를 줄여 불안정한 TF 기간 중 손상을 제한 (이전 `2.0`) |
+| `minimum_travel_distance` | `0.5` m | 충분한 이동 후에만 새 스캔 노드 추가, 노이즈 스캔 감소 (이전 `0.3`) |
+| `loop_match_maximum_variance_coarse` | `1.5` | ⭐ 루프 클로저 허용 오차 축소. TB3_2가 막힌 상황에서 발생하는 방사형 맵 폭발을 방지하는 직접적 원인인 잘못된 루프 클로저를 방지 (이전 `3.0`) |
 
 ### Nav2 로컬 제어기 설정 (`param/escort_controll_server1.yaml`)
 
