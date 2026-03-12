@@ -32,7 +32,7 @@ The follower behavior logic exposes parameters to fine-tune how aggressively it 
 - `tf_timeout_sec` (`2.0` s): If the leader's position is not updated via TF for 2.0 seconds (e.g., due to occlusion or network drop), the follower enters **Recovery Mode**.
 - `recovery_resend_period_sec` (`3.0` s): While in Recovery Mode, the "go to last known position" goal is **re-sent every 3 seconds**. This prevents the follower from stopping if Nav2 internally drops a goal after completing it or failing silently.
 
-## Nav2 Controller Configurations (`param/escort_controll_server1.yaml`)
+## Nav2 Controller Configurations (`escort_follower/param/controll_server1.yaml`)
 
 The `dwb_core::DWBLocalPlanner` on the follower is specifically tuned for smooth tracking rather than aggressive exploration:
 
@@ -154,7 +154,7 @@ SLAM은 리더 (`TB3_1`)에서만 실행됩니다. 팔로워 bridge TF 불안정
 | `minimum_travel_distance` | `0.5` m | 충분한 이동 후에만 새 스캔 노드 추가, 노이즈 스캔 감소 (이전 `0.3`) |
 | `loop_match_maximum_variance_coarse` | `1.5` | ⭐ 루프 클로저 허용 오차 축소. TB3_2가 막힌 상황에서 발생하는 방사형 맵 폭발을 방지하는 직접적 원인인 잘못된 루프 클로저를 방지 (이전 `3.0`) |
 
-### Nav2 로컬 제어기 설정 (`param/escort_controll_server1.yaml`)
+### Nav2 로컬 제어기 설정 (`escort_follower/param/controll_server1.yaml`)
 
 팔로워 로봇의 `dwb_core::DWBLocalPlanner`는 공격적이고 빠른 자율주행보다는 부드러운 에스코트 주행을 위해 다음과 같이 특별하게 튜닝되었습니다:
 

@@ -48,16 +48,10 @@ def generate_launch_description():
     )
     namespace = 'TB3_2'
     ctrl_yaml_path = os.path.join(
-        get_package_share_directory('escort_turtlebot_pkg'),
+        get_package_share_directory('escort_follower'),
         'param',
-        'escort_controll_server1.yaml'
+        'controll_server1.yaml'
     )
-    if not os.path.exists(ctrl_yaml_path):
-        ctrl_yaml_path = os.path.join(
-            get_package_share_directory('escort_follower'),
-            'param',
-            'controll_server1.yaml'
-        )
 
     tf_bridge_node = Node(
         package='escort_turtlebot_pkg',

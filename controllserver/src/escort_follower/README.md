@@ -48,7 +48,7 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
   the leader's last known position and **re-sends the goal every `recovery_resend_period_sec`** seconds
   until the leader is found again.
 - Distance sensing/calculation reference:
-  - `docs/distance_measurement_reference.md`
+  - [`docs/distance_measurement_reference.md`](docs/distance_measurement_reference.md)
 
 ## 한국어 안내
 
@@ -89,4 +89,4 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py follow_distance:=0.5 
 - **복구 모드:** 리더 TF가 `tf_timeout_sec` 이상 끊기면 마지막 알려진 위치로 이동하고,
   `recovery_resend_period_sec` 주기마다 목표를 재전송하여 리더가 돌아올 때까지 대기합니다.
 - 거리 인식/계산 참고 문서:
-  - `docs/distance_measurement_reference.md`
+  - [`docs/distance_measurement_reference.md`](docs/distance_measurement_reference.md)
