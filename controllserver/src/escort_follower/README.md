@@ -1,12 +1,13 @@
 # escort_follower
 
-C++ package for multi-TurtleBot follower control using TF-relative target generation and Nav2 `FollowPath`.
+C++ package for multi-robot follower control using TF-relative target generation and Nav2 `FollowPath`.
 
 ## What It Does
-- Runs follower nodes for `TB3_2 ... TB3_n`.
-- Computes leader pose in follower frame from TF.
-- Builds short 2-point path and sends `FollowPath` goals.
-- Uses a hybrid target rule: target point is generated behind leader heading.
+- Runs a follower node that can be configured for any robot.
+- Computes leader pose in the follower's frame from TF.
+- Builds a short 2-point path and sends `FollowPath` goals.
+- Uses a hybrid target rule: the target point is generated behind the leader's heading.
+- The core logic is compiled into a reusable `follower_lib` library.
 
 ## Build
 ```bash
@@ -15,20 +16,29 @@ colcon build --packages-select escort_follower
 source install/setup.bash
 ```
 
-## Run (Example)
+## Run
+
+### Via Launch File (Recommended)
 ```bash
 ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
-  follow_distance:=0.5 initial_step_distance:=0.0 use_sim_time:=false
+  leader_name:=TB3_1 \
+  follower_name:=TB3_2 \
+  follow_distance:=0.5 \
+  initial_step_distance:=0.0 \
+  use_sim_time:=false
+```
+
+### Standalone (For Debugging)
+The follower node can be run directly. It requires the follower and leader names as command-line arguments.
+```bash
+ros2 run escort_follower follower <follower_name> <leader_name> --ros-args -p use_sim_time:=false
 ```
 
 ## Main Parameters (`follower` node)
 - `follow_distance` (double, default: `0.5`)
-  Rear offset from leader heading used to generate follow target.
+  Rear offset from leader heading used to generate the follow target.
 - `initial_step_distance` (double, default: `0.0`)
   One-time initial forward step distance toward the generated target.
-- `publish_odom_bridge` (bool, default: `true`)
-  Enable internal TF bridge publishing (`leader/odom -> follower/odom`).
-  > **Note:** Set to `false` in `escort_follower.launch.py` since `follower_detector_node` handles TF publishing via ICP scan matching.
 - `goal_update_distance_threshold` (double, default: `0.03`)
   Minimum target change before sending a new `FollowPath` goal.
 - `goal_update_min_period_sec` (double, default: `0.3`)
@@ -55,9 +65,11 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
 이 패키지는 TF 기반 상대 위치를 이용해 follower 경로를 생성하고 Nav2 `FollowPath`로 전달합니다.
 
 ### 기능
-- `TB3_2 ... TB3_n` follower 노드 실행
-- follower 기준 leader 상대 위치 계산
-- 2개 포인트 경로 생성 후 `FollowPath` goal 전송
+- 모든 로봇에 맞게 설정할 수 있는 팔로워 노드를 실행합니다.
+- TF를 통해 팔로워의 프레임에서 리더의 자세를 계산합니다.
+- 짧은 2-포인트 경로를 생성하고 `FollowPath` 목표를 전송합니다.
+- 하이브리드 타겟 규칙을 사용합니다: 타겟 포인트는 리더의 방향 뒤에 생성됩니다.
+- 핵심 로직은 재사용 가능한 `follower_lib` 라이브러리로 컴파일됩니다.
 
 ### 빌드
 ```bash
@@ -66,16 +78,27 @@ colcon build --packages-select escort_follower
 source install/setup.bash
 ```
 
-### 실행 예시
+### 실행
+
+#### 런치 파일 사용 (권장)
 ```bash
-ros2 launch escort_turtlebot_pkg escort_follower.launch.py follow_distance:=0.5 initial_step_distance:=0.0 use_sim_time:=false
+ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
+  leader_name:=TB3_1 \
+  follower_name:=TB3_2 \
+  follow_distance:=0.5 \
+  initial_step_distance:=0.0 \
+  use_sim_time:=false
+```
+
+#### 단독 실행 (디버깅용)
+팔로워 노드를 직접 실행할 수 있습니다. 팔로워와 리더 이름을 커맨드 라인 인자로 받습니다.
+```bash
+ros2 run escort_follower follower <팔로워_이름> <리더_이름> --ros-args -p use_sim_time:=false
 ```
 
 ### 주요 파라미터 (`follower` 노드)
 - `follow_distance` (기본값 `0.5`): 리더 진행 방향 기준 뒤쪽 목표점 오프셋
 - `initial_step_distance` (기본값 `0.0`): follower의 1회 초기 전진 거리
-- `publish_odom_bridge` (기본값 `true`): 내부 TF 브리지(`leader/odom -> follower/odom`) 사용 여부
-  > **참고:** `escort_follower.launch.py`에서는 `follower_detector_node`가 ICP로 TF를 발행하므로 `false`로 설정됩니다.
 - `goal_update_distance_threshold` (기본값 `0.03`): 새 goal 전송을 위한 최소 목표 변화량
 - `goal_update_min_period_sec` (기본값 `0.3`): goal 전송 최소 주기(초)
 - `use_sim_time` (기본값 `false`): 시뮬레이션 시간 사용 여부
