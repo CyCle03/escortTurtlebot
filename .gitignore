@@ -29,3 +29,6 @@ controllserver/log/
 
 # Temporary archive workspace
 tmp/
+
+
+.aiexclude

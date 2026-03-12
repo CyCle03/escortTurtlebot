@@ -130,25 +130,29 @@ class FollowerDetectorNode(Node):
             self.declare_parameter('use_sim_time', False)
         except rclpy.exceptions.ParameterAlreadyDeclaredException:
             pass
+        self.declare_parameter('leader_name', 'TB3_1')
+        self.declare_parameter('follower_name', 'TB3_2')
 
         # ICP 매칭 품질 임계값: 이 값 이상이어야 TF 업데이트에 사용
         self.declare_parameter('icp_fitness_threshold', 0.3)
         # 이전 TF와 새 ICP 결과를 혼합하는 비율 (0=이전값 유지, 1=ICP 결과 그대로 사용)
         self.declare_parameter('blend_alpha', 0.5)
-        # TB3_1 스캔이 이 시간(초) 이상 수신되지 않으면 stale 스캔으로 간주하여
+        # 스캔이 이 시간(초) 이상 수신되지 않으면 stale 스캔으로 간주하여
         # 마지막 유효한 bridge TF를 보존하기 위해 ICP를 건너 뜀
-        self.declare_parameter('scan1_timeout_sec', 1.0)
+        self.declare_parameter('scan_timeout_sec', 1.0)
         # ICP 결과가 현재 bridge TF 대비 이 거리(단위: m) 이상 차이가 나면 부정확한 결과로 판단 → reject
         self.declare_parameter('max_correction_dist', 0.3)
         # ICP 결과가 현재 bridge TF 대비 이 각도(rad) 이상 차이가 나면 reject
         self.declare_parameter('max_correction_angle', 0.5)
-        # TB3_2가 이동 중인지 판단하는 init_pose 변화량 임계값(m).
-        # 이 값 이하면 TB3_2가 정지한 것으로 간주하고 ICP 업데이트를 건너뜀 (맵 오염 원천 차단)
+        # 팔로워가 이동 중인지 판단하는 init_pose 변화량 임계값(m).
+        # 이 값 이하면 팔로워가 정지한 것으로 간주하고 ICP 업데이트를 건너뜀 (맵 오염 원천 차단)
         self.declare_parameter('odom_motion_threshold', 0.02)
 
+        self.leader_name = self.get_parameter('leader_name').value
+        self.follower_name = self.get_parameter('follower_name').value
         self.icp_fitness_threshold = self.get_parameter('icp_fitness_threshold').value
         self.blend_alpha = self.get_parameter('blend_alpha').value
-        self.scan1_timeout_sec = self.get_parameter('scan1_timeout_sec').value
+        self.scan_timeout_sec = self.get_parameter('scan_timeout_sec').value
         self.max_correction_dist = self.get_parameter('max_correction_dist').value
         self.max_correction_angle = self.get_parameter('max_correction_angle').value
         self.odom_motion_threshold = self.get_parameter('odom_motion_threshold').value
@@ -159,26 +163,26 @@ class FollowerDetectorNode(Node):
 
         self.subscription1 = self.create_subscription(
             LaserScan,
-            '/TB3_1/scan',
+            f'/{self.leader_name}/scan',
             self.scan1_callback,
             rclpy.qos.qos_profile_sensor_data)
 
         self.subscription2 = self.create_subscription(
             LaserScan,
-            '/TB3_2/scan',
+            f'/{self.follower_name}/scan',
             self.scan2_callback,
             rclpy.qos.qos_profile_sensor_data)
 
         self.latest_odom_tf = None
         self.latest_scan1 = None
-        self.latest_scan1_stamp = None  # TB3_1 스캔 마지막 수신 시각 (stale 감지용)
-        self.prev_init_pose = None      # TB3_2 정지 상태 감지용: 직전 ICP init_pose 저장
+        self.latest_scan1_stamp = None  # 리더 스캔 마지막 수신 시각 (stale 감지용)
+        self.prev_init_pose = None      # 팔로워 정지 상태 감지용: 직전 ICP init_pose 저장
         self.timer = self.create_timer(0.05, self.publish_tf)
         self.get_logger().info(
-            f"ICP Scan Matching Follower detector initialized! "
+            f"ICP Scan Matching Follower detector for {self.follower_name} following {self.leader_name} initialized! "
             f"(fitness={self.icp_fitness_threshold:.2f}, "
             f"alpha={self.blend_alpha:.2f}, "
-            f"scan1_timeout={self.scan1_timeout_sec:.1f}s, "
+            f"scan_timeout={self.scan_timeout_sec:.1f}s, "
             f"max_corr={self.max_correction_dist:.2f}m/{math.degrees(self.max_correction_angle):.0f}deg, "
             f"odom_thresh={self.odom_motion_threshold:.3f}m)")
 
@@ -192,14 +196,14 @@ class FollowerDetectorNode(Node):
         if self.latest_scan1 is None:
             return
 
-        # TB3_1 스캔이 오래된 데이터인지 확인 (리더봇 소실 감지)
+        # 리더 스캔이 오래된 데이터인지 확인 (리더봇 소실 감지)
         if self.latest_scan1_stamp is not None:
             scan1_age = (self.get_clock().now() - self.latest_scan1_stamp).nanoseconds / 1e9
-            if scan1_age > self.scan1_timeout_sec:
+            if scan1_age > self.scan_timeout_sec:
                 # stale 스캔으로 ICP를 실행하면 bridge TF가 오염될 수 있음
                 # 마지막 유효한 TF를 publish_tf()로 유지하고 건너뜀
                 self.get_logger().warn(
-                    f'TB3_1/scan not received for {scan1_age:.1f}s '
+                    f'{self.leader_name}/scan not received for {scan1_age:.1f}s '
                     '(리더봇 소실 추정). 마지막 bridge TF를 보존합니다.',
                     throttle_duration_sec=2.0)
                 return
@@ -210,9 +214,9 @@ class FollowerDetectorNode(Node):
 
         try:
             T_odom1_scan1_msg = self.tf_buffer.lookup_transform(
-                'TB3_1/odom', 'TB3_1/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
+                f'{self.leader_name}/odom', f'{self.leader_name}/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
             T_odom2_scan2_msg = self.tf_buffer.lookup_transform(
-                'TB3_2/odom', 'TB3_2/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
+                f'{self.follower_name}/odom', f'{self.follower_name}/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
 
             T_odom1_scan1 = get_transform_matrix_2d(T_odom1_scan1_msg)
             T_odom2_scan2 = get_transform_matrix_2d(T_odom2_scan2_msg)
@@ -223,22 +227,22 @@ class FollowerDetectorNode(Node):
                 T_scan1_scan2_guess = T_scan1_odom1 @ T_odom1_odom2 @ T_odom2_scan2
                 init_pose = [T_scan1_scan2_guess[0, 2], T_scan1_scan2_guess[1, 2], math.atan2(T_scan1_scan2_guess[1, 0], T_scan1_scan2_guess[0, 0])]
             else:
-                # 초기 추정: TB3_2가 TB3_1의 약 0.5m 뒤에 있음
+                # 초기 추정: 팔로워가 리더의 약 0.5m 뒤에 있음
                 init_pose = [-0.5, 0.0, 0.0]
 
-            # --- TB3_2 정지 상태 감지: map 오염 원천 차단 ---
-            # init_pose는 TB3_2의 odom 변화를 반영하므로,
-            # 직전 init_pose와 현재 init_pose를 비교하여 TB3_2가 멈췄는지 판단
+            # --- 팔로워 정지 상태 감지: map 오염 원천 차단 ---
+            # init_pose는 팔로워의 odom 변화를 반영하므로,
+            # 직전 init_pose와 현재 init_pose를 비교하여 팔로워가 멈췄는지 판단
             if self.prev_init_pose is not None:
                 pose_change = math.hypot(
                     init_pose[0] - self.prev_init_pose[0],
                     init_pose[1] - self.prev_init_pose[1])
                 if pose_change < self.odom_motion_threshold:
-                    # TB3_2가 정지 실두 미속(장애물에 막힌 상황).
+                    # 팔로워가 정지.
                     # 환경이 다른 두 스캔을 매칭하면 bridge TF가 오염되어
                     # map이 깨질 수 있으므로 ICP를 건너뜀.
                     self.get_logger().info(
-                        f'TB3_2 stationary (odom_delta={pose_change:.4f}m < {self.odom_motion_threshold:.4f}m). '
+                        f'{self.follower_name} stationary (odom_delta={pose_change:.4f}m < {self.odom_motion_threshold:.4f}m). '
                         'Skipping ICP to protect bridge TF.',
                         throttle_duration_sec=3.0)
                     self.prev_init_pose = init_pose
@@ -285,7 +289,7 @@ class FollowerDetectorNode(Node):
                     return
 
             now = self.get_clock().now().to_msg()
-            new_msg = matrix_to_transform_msg_2d(T_odom1_odom2_new, 'TB3_1/odom', 'TB3_2/odom', now)
+            new_msg = matrix_to_transform_msg_2d(T_odom1_odom2_new, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
 
 
             if self.latest_odom_tf is None:
@@ -313,7 +317,7 @@ class FollowerDetectorNode(Node):
                     [0, 0, 1]
                 ])
 
-                self.latest_odom_tf = matrix_to_transform_msg_2d(T_blend, 'TB3_1/odom', 'TB3_2/odom', now)
+                self.latest_odom_tf = matrix_to_transform_msg_2d(T_blend, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
 
         except Exception as e:
             self.get_logger().warn(
@@ -327,9 +331,9 @@ class FollowerDetectorNode(Node):
             self.tf_broadcaster.sendTransform(self.latest_odom_tf)
         else:
             new_tf = TransformStamped()
-            new_tf.header.frame_id = 'TB3_1/odom'
+            new_tf.header.frame_id = f'{self.leader_name}/odom'
             new_tf.header.stamp = now
-            new_tf.child_frame_id = 'TB3_2/odom'
+            new_tf.child_frame_id = f'{self.follower_name}/odom'
             new_tf.transform.translation.x = -0.5
             new_tf.transform.rotation.w = 1.0
             self.tf_broadcaster.sendTransform(new_tf)

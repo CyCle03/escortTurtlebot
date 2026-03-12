@@ -25,9 +25,9 @@ include_directories(
   include
 )
 
-add_executable(follower src/follower.cpp)
+add_library(follower_lib src/follower.cpp)
 
-ament_target_dependencies(follower
+ament_target_dependencies(follower_lib
   rclcpp
   std_msgs
   geometry_msgs
@@ -38,12 +38,27 @@ ament_target_dependencies(follower
   nav2_msgs
 )
 
+add_executable(follower src/follower_main.cpp)
+ament_target_dependencies(follower
+  rclcpp
+)
+target_link_libraries(follower
+  follower_lib
+)
+
+
 ################################################################################
 # Install
 ################################################################################
 install(TARGETS
   follower
+  follower_lib
   DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  DIRECTORY include/
+  DESTINATION include
 )
 
 install(

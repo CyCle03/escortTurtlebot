@@ -29,24 +29,25 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
+    leader_name = LaunchConfiguration('leader_name')
+    follower_name = LaunchConfiguration('follower_name')
     follow_distance = LaunchConfiguration('follow_distance')
     initial_step_distance = LaunchConfiguration('initial_step_distance')
 
     follower = Node(
         package='escort_follower',
         executable='follower',
-        name='TB3_2_follower_node',
+        name=[follower_name, '_follower_node'],
         output='screen',
-        arguments=['1'],
+        arguments=[follower_name, leader_name],
         parameters=[
             {'use_sim_time': use_sim_time},
             {'follow_distance': follow_distance},
             {'initial_step_distance': initial_step_distance},
-            {'publish_odom_bridge': False},
-            {'tracking_frame': 'TB3_1/odom'},
+            {'tracking_frame': [leader_name, '/odom']},
         ]
     )
-    namespace = 'TB3_2'
+    namespace = follower_name
     ctrl_yaml_path = os.path.join(
         get_package_share_directory('escort_follower'),
         'param',
@@ -58,7 +59,11 @@ def generate_launch_description():
         executable='follower_detector_node',
         name='follower_detector_node',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
+        parameters=[
+            {'use_sim_time': use_sim_time},
+            {'leader_name': leader_name},
+            {'follower_name': follower_name}
+        ]
     )
 
     ctrl_node = Node(
@@ -68,7 +73,7 @@ def generate_launch_description():
         name='controller_server',
         output='screen',
         parameters=[ctrl_yaml_path, {'use_sim_time': use_sim_time}],
-        remappings=[('/TB3_2/cmd_vel', '/TB3_2/cmd_vel_not_smoothed')]
+        remappings=[([namespace, '/cmd_vel'], [namespace, '/cmd_vel_not_smoothed'])]
     )
 
     lifecycle_node = Node(
@@ -91,8 +96,8 @@ def generate_launch_description():
         output='screen',
         parameters=[ctrl_yaml_path],
         remappings=[
-            ('/TB3_2/cmd_vel', '/TB3_2/cmd_vel_not_smoothed'),
-            ('/TB3_2/cmd_vel_smoothed', '/TB3_2/cmd_vel')]
+            ([namespace, '/cmd_vel'], [namespace, '/cmd_vel_not_smoothed']),
+            ([namespace, '/cmd_vel_smoothed'], [namespace, '/cmd_vel'])]
     )
 
     ld = LaunchDescription()
@@ -101,6 +106,20 @@ def generate_launch_description():
             'use_sim_time',
             default_value='false',
             description='Use simulation clock if true'
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'leader_name',
+            default_value='TB3_1',
+            description='Name of the leader robot'
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'follower_name',
+            default_value='TB3_2',
+            description='Name of the follower robot'
         )
     )
     ld.add_action(

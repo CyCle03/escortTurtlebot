@@ -38,7 +38,6 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   last_recovery_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
   is_in_recovery_mode_(false)
 {
-  this->declare_parameter<bool>("publish_odom_bridge", true);
   this->declare_parameter<double>("follow_distance", 0.5);
   this->declare_parameter<double>("initial_step_distance", 0.0);
   this->declare_parameter<double>("goal_update_distance_threshold", 0.03);
@@ -49,7 +48,6 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   if (!get_parameter("use_sim_time", use_sim_time_)) {
     use_sim_time_ = false;
   }
-  get_parameter("publish_odom_bridge", publish_odom_bridge_);
   get_parameter("follow_distance", follow_distance_);
   get_parameter("initial_step_distance", initial_step_distance_);
   get_parameter("goal_update_distance_threshold", goal_update_distance_threshold_);
@@ -61,12 +59,6 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   prior_second_target_pose_.pose.orientation.w = 1.0;
   last_sent_second_target_pose_.pose.orientation.w = 1.0;
 
-  if (publish_odom_bridge_) {
-    tf_broadcaster_ = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-    tf_publish_timer_ = this->create_wall_timer(
-      std::chrono::milliseconds(100),
-      std::bind(&Follower::tf_publisher, this));
-  }
   nav2_action_client_ = rclcpp_action::create_client<nav2_msgs::action::FollowPath>(
     this,
     follower_name_ + "/follow_path");
@@ -79,36 +71,6 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
     this->get_logger(),
     "[%s] initialized successfully",
     this->get_name());
-}
-
-void Follower::tf_publisher()
-{
-  if (!publish_odom_bridge_ || !tf_broadcaster_) {
-    return;
-  }
-  geometry_msgs::msg::TransformStamped tf_msg;
-  tf_msg.header.stamp = this->get_clock()->now();
-  tf_msg.header.frame_id = this->leader_name_ + "/odom";
-  tf_msg.child_frame_id = this->follower_name_ + "/odom";
-
-  if (this->use_sim_time_ == true) {
-    tf_msg.transform.translation.x = 0;
-    tf_msg.transform.translation.y = 0;
-    tf_msg.transform.translation.z = 0;
-    tf_msg.transform.rotation.x = 0.0;
-    tf_msg.transform.rotation.y = 0.0;
-    tf_msg.transform.rotation.z = 0.0;
-    tf_msg.transform.rotation.w = 1.0;
-  } else {
-    tf_msg.transform.translation.x = -0.14;
-    tf_msg.transform.translation.y = 0;
-    tf_msg.transform.translation.z = 0;
-    tf_msg.transform.rotation.x = 0.0;
-    tf_msg.transform.rotation.y = 0.0;
-    tf_msg.transform.rotation.z = 0.0;
-    tf_msg.transform.rotation.w = 1.0;
-  }
-  this->tf_broadcaster_->sendTransform(tf_msg);
 }
 
 bool Follower::get_target_pose()
@@ -190,7 +152,7 @@ void Follower::send_path()
     }
   }
 
-  if (!this->nav2_action_client_->wait_for_action_server(std::chrono::seconds(0))) {
+  if (!this->nav2_action_client_->wait_for_action_server(std::chrono::seconds(1))) {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000, "Action server not available");
     return;
@@ -317,36 +279,4 @@ void Follower::send_path()
   last_sent_second_target_pose_ = second_target_pose;
   has_last_sent_goal_ = true;
   this->nav2_action_client_->async_send_goal(goal_msg, goal_options);
-}
-
-int main(int argc, char * argv[])
-{
-  rclcpp::init(argc, argv);
-
-  int number = 0;
-  if (argc > 1) {
-    try {
-      number = std::stoi(argv[1]);
-    } catch (const std::exception & e) {
-      std::cerr << "Invalid number of followers: " << argv[1] << std::endl;
-      return 1;
-    }
-  }
-
-  std::vector<std::shared_ptr<Follower>> followers;
-  for (int i = 1; i <= number; ++i) {
-    auto node = std::make_shared<Follower>(
-      "TB3_" + std::to_string(i + 1),
-      "TB3_" + std::to_string(i));
-    followers.push_back(node);
-  }
-
-  rclcpp::executors::MultiThreadedExecutor executor;
-  for (auto & node : followers) {
-    executor.add_node(node);
-  }
-
-  executor.spin();
-  rclcpp::shutdown();
-  return 0;
 }
