@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
 
+import math
+
+from geometry_msgs.msg import TransformStamped
+import numpy as np
 import rclpy
 from rclpy.node import Node
-from sensor_msgs.msg import LaserScan
-from geometry_msgs.msg import TransformStamped
-import tf2_ros
-import tf2_geometry_msgs
-import math
-import numpy as np
 from scipy.spatial import cKDTree
+from sensor_msgs.msg import LaserScan
+import tf2_ros
+
 
 def get_transform_matrix_2d(transform_msg):
     t = transform_msg.transform.translation
@@ -25,6 +26,7 @@ def get_transform_matrix_2d(transform_msg):
     T[0, 2] = t.x
     T[1, 2] = t.y
     return T
+
 
 def matrix_to_transform_msg_2d(T, frame_id, child_frame_id, stamp):
     msg = TransformStamped()
@@ -43,6 +45,7 @@ def matrix_to_transform_msg_2d(T, frame_id, child_frame_id, stamp):
     msg.transform.rotation.w = math.cos(theta / 2.0)
     return msg
 
+
 def scan_to_points(msg, max_range=4.0):
     points = []
     for i, r in enumerate(msg.ranges):
@@ -58,6 +61,7 @@ def scan_to_points(msg, max_range=4.0):
     step = max(1, len(pts) // 150)
     return pts[::step, :]
 
+
 def icp(A, B, init_pose, max_iterations=30, tolerance=0.0001):
     src = np.ones((3, A.shape[0]))
     src[:2, :] = A.T
@@ -67,7 +71,7 @@ def icp(A, B, init_pose, max_iterations=30, tolerance=0.0001):
     tx, ty, theta = init_pose
     T = np.array([
         [np.cos(theta), -np.sin(theta), tx],
-        [np.sin(theta),  np.cos(theta), ty],
+        [np.sin(theta), np.cos(theta), ty],
         [0, 0, 1]
     ])
 
@@ -96,7 +100,7 @@ def icp(A, B, init_pose, max_iterations=30, tolerance=0.0001):
         R = np.dot(Vt.T, U.T)
 
         if np.linalg.det(R) < 0:
-            Vt[1,:] *= -1
+            Vt[1, :] *= -1
             R = np.dot(Vt.T, U.T)
 
         t = centroid_B.T - np.dot(R, centroid_A.T)
@@ -124,6 +128,7 @@ def icp(A, B, init_pose, max_iterations=30, tolerance=0.0001):
 
 
 class FollowerDetectorNode(Node):
+
     def __init__(self):
         super().__init__('follower_detector_node')
         try:
@@ -179,12 +184,14 @@ class FollowerDetectorNode(Node):
         self.prev_init_pose = None      # 팔로워 정지 상태 감지용: 직전 ICP init_pose 저장
         self.timer = self.create_timer(0.05, self.publish_tf)
         self.get_logger().info(
-            f"ICP Scan Matching Follower detector for {self.follower_name} following {self.leader_name} initialized! "
-            f"(fitness={self.icp_fitness_threshold:.2f}, "
-            f"alpha={self.blend_alpha:.2f}, "
-            f"scan_timeout={self.scan_timeout_sec:.1f}s, "
-            f"max_corr={self.max_correction_dist:.2f}m/{math.degrees(self.max_correction_angle):.0f}deg, "
-            f"odom_thresh={self.odom_motion_threshold:.3f}m)")
+            f"ICP Scan Matching Follower detector for {self.follower_name} "
+            f"following {self.leader_name} initialized! "
+            f'(fitness={self.icp_fitness_threshold:.2f}, '
+            f'alpha={self.blend_alpha:.2f}, '
+            f'scan_timeout={self.scan_timeout_sec:.1f}s, '
+            f'max_corr={self.max_correction_dist:.2f}m/'
+            f'{math.degrees(self.max_correction_angle):.0f}deg, '
+            f'odom_thresh={self.odom_motion_threshold:.3f}m)')
 
     def scan1_callback(self, msg):
         pts = scan_to_points(msg, max_range=3.5)
@@ -214,9 +221,11 @@ class FollowerDetectorNode(Node):
 
         try:
             T_odom1_scan1_msg = self.tf_buffer.lookup_transform(
-                f'{self.leader_name}/odom', f'{self.leader_name}/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
+                f'{self.leader_name}/odom', f'{self.leader_name}/base_scan',
+                rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
             T_odom2_scan2_msg = self.tf_buffer.lookup_transform(
-                f'{self.follower_name}/odom', f'{self.follower_name}/base_scan', rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
+                f'{self.follower_name}/odom', f'{self.follower_name}/base_scan',
+                rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
 
             T_odom1_scan1 = get_transform_matrix_2d(T_odom1_scan1_msg)
             T_odom2_scan2 = get_transform_matrix_2d(T_odom2_scan2_msg)
@@ -225,7 +234,11 @@ class FollowerDetectorNode(Node):
                 T_odom1_odom2 = get_transform_matrix_2d(self.latest_odom_tf)
                 T_scan1_odom1 = np.linalg.inv(T_odom1_scan1)
                 T_scan1_scan2_guess = T_scan1_odom1 @ T_odom1_odom2 @ T_odom2_scan2
-                init_pose = [T_scan1_scan2_guess[0, 2], T_scan1_scan2_guess[1, 2], math.atan2(T_scan1_scan2_guess[1, 0], T_scan1_scan2_guess[0, 0])]
+                init_pose = [
+                    T_scan1_scan2_guess[0, 2],
+                    T_scan1_scan2_guess[1, 2],
+                    math.atan2(T_scan1_scan2_guess[1, 0], T_scan1_scan2_guess[0, 0])
+                ]
             else:
                 # 초기 추정: 팔로워가 리더의 약 0.5m 뒤에 있음
                 init_pose = [-0.5, 0.0, 0.0]
@@ -242,27 +255,28 @@ class FollowerDetectorNode(Node):
                     # 환경이 다른 두 스캔을 매칭하면 bridge TF가 오염되어
                     # map이 깨질 수 있으므로 ICP를 건너뜀.
                     self.get_logger().info(
-                        f'{self.follower_name} stationary (odom_delta={pose_change:.4f}m < {self.odom_motion_threshold:.4f}m). '
+                        f'{self.follower_name} stationary '
+                        f'(odom_delta={pose_change:.4f}m < {self.odom_motion_threshold:.4f}m). '
                         'Skipping ICP to protect bridge TF.',
                         throttle_duration_sec=3.0)
                     self.prev_init_pose = init_pose
                     return
             self.prev_init_pose = init_pose
 
-
             T_icp_pose, fitness = icp(pts2, self.latest_scan1, init_pose)
 
             if fitness < self.icp_fitness_threshold:
                 # ICP 매칭 점수가 너무 낮으면 무시 (신뢰할 수 없는 결과)
                 self.get_logger().warn(
-                    f'ICP fitness too low ({fitness:.2f} < {self.icp_fitness_threshold:.2f}), skipping update.',
+                    f'ICP fitness too low ({fitness:.2f} < {self.icp_fitness_threshold:.2f}), '
+                    'skipping update.',
                     throttle_duration_sec=2.0)
                 return
 
             tx, ty, theta = T_icp_pose
             T_scan1_scan2 = np.array([
                 [math.cos(theta), -math.sin(theta), tx],
-                [math.sin(theta),  math.cos(theta), ty],
+                [math.sin(theta), math.cos(theta), ty],
                 [0, 0, 1]
             ])
 
@@ -276,48 +290,54 @@ class FollowerDetectorNode(Node):
                     T_odom1_odom2_new[0, 2] - T_curr_bridge[0, 2],
                     T_odom1_odom2_new[1, 2] - T_curr_bridge[1, 2])
                 th_curr_b = math.atan2(T_curr_bridge[1, 0], T_curr_bridge[0, 0])
-                th_new_b  = math.atan2(T_odom1_odom2_new[1, 0], T_odom1_odom2_new[0, 0])
+                th_new_b = math.atan2(T_odom1_odom2_new[1, 0], T_odom1_odom2_new[0, 0])
                 corr_angle = abs(math.atan2(math.sin(th_new_b - th_curr_b),
                                             math.cos(th_new_b - th_curr_b)))
                 if corr_dist > self.max_correction_dist or corr_angle > self.max_correction_angle:
                     self.get_logger().warn(
-                        f'ICP correction too large '
+                        'ICP correction too large '
                         f'(dist={corr_dist:.2f}m/{self.max_correction_dist:.2f}m, '
-                        f'angle={math.degrees(corr_angle):.1f}/{math.degrees(self.max_correction_angle):.1f}deg). '
+                        f'angle={math.degrees(corr_angle):.1f}/'
+                        f'{math.degrees(self.max_correction_angle):.1f}deg). '
                         'Rejecting to protect bridge TF.',
                         throttle_duration_sec=2.0)
                     return
 
             now = self.get_clock().now().to_msg()
-            new_msg = matrix_to_transform_msg_2d(T_odom1_odom2_new, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
-
+            new_msg = matrix_to_transform_msg_2d(
+                T_odom1_odom2_new, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
 
             if self.latest_odom_tf is None:
                 self.latest_odom_tf = new_msg
-                self.get_logger().info(f"ICP Initialized! Fitness: {fitness:.2f}, distance: {math.hypot(tx, ty):.2f}m")
+                self.get_logger().info(
+                    f'ICP Initialized! Fitness: {fitness:.2f}, '
+                    f'distance: {math.hypot(tx, ty):.2f}m')
             else:
                 alpha = self.blend_alpha
                 T_curr = get_transform_matrix_2d(self.latest_odom_tf)
                 T_new = get_transform_matrix_2d(new_msg)
 
-                tx_blend = (1-alpha)*T_curr[0,2] + alpha*T_new[0,2]
-                ty_blend = (1-alpha)*T_curr[1,2] + alpha*T_new[1,2]
+                tx_blend = (1 - alpha) * T_curr[0, 2] + alpha * T_new[0, 2]
+                ty_blend = (1 - alpha) * T_curr[1, 2] + alpha * T_new[1, 2]
 
-                th_curr = math.atan2(T_curr[1,0], T_curr[0,0])
-                th_new = math.atan2(T_new[1,0], T_new[0,0])
+                th_curr = math.atan2(T_curr[1, 0], T_curr[0, 0])
+                th_new = math.atan2(T_new[1, 0], T_new[0, 0])
 
                 diff = th_new - th_curr
-                while diff > math.pi: diff -= 2*math.pi
-                while diff < -math.pi: diff += 2*math.pi
+                while diff > math.pi:
+                    diff -= 2 * math.pi
+                while diff < -math.pi:
+                    diff += 2 * math.pi
                 th_blend = th_curr + alpha * diff
 
                 T_blend = np.array([
                     [math.cos(th_blend), -math.sin(th_blend), tx_blend],
-                    [math.sin(th_blend),  math.cos(th_blend), ty_blend],
+                    [math.sin(th_blend), math.cos(th_blend), ty_blend],
                     [0, 0, 1]
                 ])
 
-                self.latest_odom_tf = matrix_to_transform_msg_2d(T_blend, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
+                self.latest_odom_tf = matrix_to_transform_msg_2d(
+                    T_blend, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
 
         except Exception as e:
             self.get_logger().warn(
@@ -338,12 +358,14 @@ class FollowerDetectorNode(Node):
             new_tf.transform.rotation.w = 1.0
             self.tf_broadcaster.sendTransform(new_tf)
 
+
 def main(args=None):
     rclpy.init(args=args)
     node = FollowerDetectorNode()
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

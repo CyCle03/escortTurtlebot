@@ -69,4 +69,16 @@ install(
 ################################################################################
 # Macro for ament package
 ################################################################################
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(follower_lib_test test/follower_lib_test.cpp)
+  ament_target_dependencies(follower_lib_test
+    "rclcpp"
+    "tf2_ros"
+  )
+  target_link_libraries(follower_lib_test
+    follower_lib
+  )
+endif()
+
 ament_package()

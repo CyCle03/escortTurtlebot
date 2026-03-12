@@ -36,6 +36,27 @@
 #include <rclcpp_action/rclcpp_action.hpp>
 #include <tf2_geometry_msgs/tf2_geometry_msgs.hpp>
 
+class FollowerCore
+{
+public:
+  explicit FollowerCore(
+    const std::string & follower_name,
+    const std::string & leader_name,
+    const double follow_distance,
+    std::shared_ptr<tf2_ros::Buffer> tf_buffer
+  );
+
+  bool get_target_pose(
+    geometry_msgs::msg::TransformStamped & leader_pose,
+    const std::string & tracking_frame);
+
+private:
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::string leader_name_;
+  std::string follower_name_;
+  double follow_distance_;
+};
+
 
 class Follower : public rclcpp::Node
 {
@@ -55,7 +76,7 @@ private:
   rclcpp::TimerBase::SharedPtr send_path_timer_;
   rclcpp_action::Client<nav2_msgs::action::FollowPath>::SharedPtr nav2_action_client_;
   rclcpp_action::ClientGoalHandle<nav2_msgs::action::FollowPath>::SharedPtr active_goal_handle_;
-  tf2_ros::Buffer tf_buffer_;
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer_;
   tf2_ros::TransformListener tf_listener_;
 
   std::string leader_name_;
@@ -77,6 +98,7 @@ private:
   rclcpp::Time last_recovery_goal_sent_time_;
   bool is_in_recovery_mode_;
   std::string tracking_frame_;
+  std::unique_ptr<FollowerCore> follower_core_;
 };
 
 #endif  // ESCORT_FOLLOWER__FOLLOWER_HPP_

@@ -1,11 +1,13 @@
-import rclpy
+import math
+
 from geometry_msgs.msg import Twist
 from nav_msgs.msg import Odometry
+import rclpy
 from rclpy.node import Node
-import math
 
 
 class LeaderInitialMoveNode(Node):
+
     def __init__(self):
         super().__init__('leader_initial_move_node')
         self.declare_parameter('cmd_vel_topic', '/TB3_1/cmd_vel')
@@ -19,8 +21,10 @@ class LeaderInitialMoveNode(Node):
         odom_topic = self.get_parameter('odom_topic').get_parameter_value().string_value
         distance = self.get_parameter('distance').get_parameter_value().double_value
         speed = self.get_parameter('speed').get_parameter_value().double_value
-        startup_delay_sec = self.get_parameter('startup_delay_sec').get_parameter_value().double_value
-        self.max_duration_sec = self.get_parameter('max_duration_sec').get_parameter_value().double_value
+        startup_delay_sec = self.get_parameter(
+            'startup_delay_sec').get_parameter_value().double_value
+        self.max_duration_sec = self.get_parameter(
+            'max_duration_sec').get_parameter_value().double_value
 
         self.speed = max(0.01, abs(speed))
         self.target_distance = abs(distance)
@@ -77,7 +81,8 @@ class LeaderInitialMoveNode(Node):
 
         moved_distance = 0.0
         if self.motion_started:
-            moved_distance = math.hypot(self.current_x - self.start_x, self.current_y - self.start_y)
+            moved_distance = math.hypot(self.current_x - self.start_x,
+                                        self.current_y - self.start_y)
 
         self.elapsed += self.timer_period
 

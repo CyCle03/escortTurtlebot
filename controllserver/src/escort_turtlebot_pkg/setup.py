@@ -1,4 +1,5 @@
 from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'escort_turtlebot_pkg'
@@ -13,6 +14,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/param', glob('param/*.yaml')),
+        ('share/' + package_name + '/test', glob('test/*.py')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
@@ -23,6 +25,9 @@ setup(
     extras_require={
         'test': [
             'pytest',
+            'pytest-ros',
+            'launch',
+            'launch_ros',
         ],
     },
     entry_points={

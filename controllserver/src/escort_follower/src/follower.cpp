@@ -21,11 +21,39 @@
 
 #include <tf2/utils.h>
 
+FollowerCore::FollowerCore(
+  const std::string & follower_name,
+  const std::string & leader_name,
+  const double follow_distance,
+  std::shared_ptr<tf2_ros::Buffer> tf_buffer)
+: tf_buffer_(tf_buffer),
+  leader_name_(leader_name),
+  follower_name_(follower_name),
+  follow_distance_(follow_distance)
+{
+}
+
+bool FollowerCore::get_target_pose(
+  geometry_msgs::msg::TransformStamped & leader_pose,
+  const std::string & tracking_frame)
+{
+  try {
+    leader_pose = tf_buffer_->lookupTransform(
+      tracking_frame,
+      leader_name_ + "/base_footprint",
+      tf2::TimePointZero);
+    return true;
+  } catch (const tf2::TransformException & ex) {
+    // RCLCPP_WARN_THROTTLE is not available here, the caller (ROS node) should log.
+  }
+  return false;
+}
+
 
 Follower::Follower(const std::string & follower_name, const std::string & leader_name)
 : Node(follower_name + "_follower_node"),
-  tf_buffer_(this->get_clock()),
-  tf_listener_(tf_buffer_),
+  tf_buffer_(std::make_shared<tf2_ros::Buffer>(this->get_clock())),
+  tf_listener_(*tf_buffer_),
   leader_name_(leader_name),
   follower_name_(follower_name),
   has_last_sent_goal_(false),
@@ -59,6 +87,9 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   prior_second_target_pose_.pose.orientation.w = 1.0;
   last_sent_second_target_pose_.pose.orientation.w = 1.0;
 
+  follower_core_ = std::make_unique<FollowerCore>(
+    follower_name_, leader_name_, follow_distance_, tf_buffer_);
+
   nav2_action_client_ = rclcpp_action::create_client<nav2_msgs::action::FollowPath>(
     this,
     follower_name_ + "/follow_path");
@@ -75,28 +106,23 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
 
 bool Follower::get_target_pose()
 {
-  bool leader_ok = false;
-  try {
-    this->leader_pose_in_tracking_frame_ = this->tf_buffer_.lookupTransform(
-      tracking_frame_,
-      this->leader_name_ + "/base_footprint",
-      tf2::TimePointZero);
+  bool leader_ok = follower_core_->get_target_pose(leader_pose_in_tracking_frame_, tracking_frame_);
 
+  if (leader_ok) {
     this->last_known_leader_pose_ = this->leader_pose_in_tracking_frame_;
     this->last_tf_success_time_ = this->get_clock()->now();
     if (this->is_in_recovery_mode_) {
       RCLCPP_INFO(this->get_logger(), "Leader found! Exiting recovery mode.");
       this->is_in_recovery_mode_ = false;
     }
-    leader_ok = true;
-  } catch (const tf2::TransformException & ex) {
+  } else {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000,
       "Waiting for leader TF in tracking frame '%s'", tracking_frame_.c_str());
   }
 
   try {
-    this->follower_pose_in_tracking_frame_ = this->tf_buffer_.lookupTransform(
+    this->follower_pose_in_tracking_frame_ = this->tf_buffer_->lookupTransform(
       tracking_frame_,
       this->follower_name_ + "/base_footprint",
       tf2::TimePointZero);
