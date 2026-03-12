@@ -27,7 +27,7 @@ class EscortGestureMaskNode(Node):
         self.timer = self.create_timer(0.033, self.process_frame)
 
         # YOLO 마스크 모델 설정
-        self.model = YOLO("/home/robot/robot_ws/src/team_project/team_project/best.pt")
+        self.model = YOLO("/home/robot/robot_ws/src/team_project/control_robot/team_project/best.pt")
         self.colors = {
             "with_mask": (0, 255, 0),
             "without_mask": (0, 0, 255),
