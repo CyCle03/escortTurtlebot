@@ -2,6 +2,10 @@
 # setup_robot.sh
 # Run this script directly on the TurtleBot3 Raspberry Pi to configure it for the Escort Project.
 
+# 에러 발생 시 즉시 스크립트 중단 (set -e), 파이프 에러도 잡기 (pipefail)
+set -e
+set -o pipefail
+
 echo "================================================="
 echo " Starting TurtleBot3 Escort Pi Setup Script "
 echo "================================================="
@@ -9,7 +13,11 @@ echo "================================================="
 # 1. Timezone & Synchronization (Chrony)
 echo "[1/4] Setting up Timezone and Chrony..."
 sudo timedatectl set-timezone Asia/Seoul
-sudo apt-get update
+echo "    -> Updating package list..."
+if ! sudo apt-get update; then
+    echo "Error: apt-get update failed. Check your network connection."
+    exit 1
+fi
 sudo apt-get install -y chrony
 sudo systemctl restart chrony
 sudo chronyc makestep

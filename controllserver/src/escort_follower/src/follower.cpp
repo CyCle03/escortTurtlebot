@@ -34,6 +34,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   applied_initial_step_(false),
   last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
   last_tf_success_time_(0, 0, this->get_clock()->get_clock_type()),
+  last_recovery_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
   is_in_recovery_mode_(false)
 {
   this->declare_parameter<bool>("publish_odom_bridge", true);
@@ -42,6 +43,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   this->declare_parameter<double>("goal_update_distance_threshold", 0.03);
   this->declare_parameter<double>("goal_update_min_period_sec", 0.3);
   this->declare_parameter<double>("tf_timeout_sec", 2.0);
+  this->declare_parameter<double>("recovery_resend_period_sec", 3.0);
   this->declare_parameter<std::string>("tracking_frame", "map");
   if (!get_parameter("use_sim_time", use_sim_time_)) {
     use_sim_time_ = false;
@@ -52,6 +54,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   get_parameter("goal_update_distance_threshold", goal_update_distance_threshold_);
   get_parameter("goal_update_min_period_sec", goal_update_min_period_sec_);
   get_parameter("tf_timeout_sec", tf_timeout_sec_);
+  get_parameter("recovery_resend_period_sec", recovery_resend_period_sec_);
   get_parameter("tracking_frame", tracking_frame_);
 
   prior_second_target_pose_.pose.orientation.w = 1.0;
@@ -155,6 +158,21 @@ void Follower::send_path()
       RCLCPP_WARN(this->get_logger(), "Leader lost for %.1f sec! Entering Recovery Mode.", time_since_last_success);
       is_in_recovery_mode_ = true;
       trigger_recovery_now = true;
+    } else if (is_in_recovery_mode_) {
+      // Recovery Mode 지속 중: 주기적으로 마지막 알려진 위치로 목표 재전송
+      double time_since_recovery_goal =
+        (this->get_clock()->now() - last_recovery_goal_sent_time_).seconds();
+      if (last_recovery_goal_sent_time_.nanoseconds() == 0 ||
+          time_since_recovery_goal > recovery_resend_period_sec_)
+      {
+        RCLCPP_INFO(
+          this->get_logger(),
+          "Still in recovery mode. Re-sending goal to last known position (%.1f sec elapsed).",
+          time_since_last_success);
+        trigger_recovery_now = true;
+      } else {
+        return;
+      }
     } else {
       return;
     }
@@ -197,6 +215,7 @@ void Follower::send_path()
     second_target_pose.pose.position.x = this->last_known_leader_pose_.transform.translation.x;
     second_target_pose.pose.position.y = this->last_known_leader_pose_.transform.translation.y;
     second_target_pose.pose.orientation = this->last_known_leader_pose_.transform.rotation;
+    last_recovery_goal_sent_time_ = this->get_clock()->now();
   } else {
     // Normal hybrid target generation
     const double leader_x = this->leader_pose_in_tracking_frame_.transform.translation.x;

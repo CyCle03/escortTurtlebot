@@ -130,7 +130,15 @@ class FollowerDetectorNode(Node):
             self.declare_parameter('use_sim_time', False)
         except rclpy.exceptions.ParameterAlreadyDeclaredException:
             pass
-        
+
+        # ICP 매칭 품질 임계값: 이 값 이상이어야 TF 업데이트에 사용
+        self.declare_parameter('icp_fitness_threshold', 0.3)
+        # 이전 TF와 새 ICP 결과를 혼합하는 비율 (0=이전값 유지, 1=ICP 결과 그대로 사용)
+        self.declare_parameter('blend_alpha', 0.5)
+
+        self.icp_fitness_threshold = self.get_parameter('icp_fitness_threshold').value
+        self.blend_alpha = self.get_parameter('blend_alpha').value
+
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
         self.tf_broadcaster = tf2_ros.TransformBroadcaster(self)
@@ -150,7 +158,10 @@ class FollowerDetectorNode(Node):
         self.latest_odom_tf = None
         self.latest_scan1 = None
         self.timer = self.create_timer(0.05, self.publish_tf)
-        self.get_logger().info("ICP Scan Matching Follower detector initialized!")
+        self.get_logger().info(
+            f"ICP Scan Matching Follower detector initialized! "
+            f"(fitness_threshold={self.icp_fitness_threshold:.2f}, "
+            f"blend_alpha={self.blend_alpha:.2f})")
 
     def scan1_callback(self, msg):
         pts = scan_to_points(msg, max_range=3.5)
@@ -185,8 +196,11 @@ class FollowerDetectorNode(Node):
                 
             T_icp_pose, fitness = icp(pts2, self.latest_scan1, init_pose)
             
-            if fitness < 0.15:
-                # 매칭 실패 시 너무 낮은 점수면 무시
+            if fitness < self.icp_fitness_threshold:
+                # ICP 매칭 점수가 너무 낮으면 무시 (신뢰할 수 없는 결과)
+                self.get_logger().warn(
+                    f'ICP fitness too low ({fitness:.2f} < {self.icp_fitness_threshold:.2f}), skipping update.',
+                    throttle_duration_sec=2.0)
                 return
                 
             tx, ty, theta = T_icp_pose
@@ -206,7 +220,7 @@ class FollowerDetectorNode(Node):
                 self.latest_odom_tf = new_msg
                 self.get_logger().info(f"ICP Initialized! Fitness: {fitness:.2f}, distance: {math.hypot(tx, ty):.2f}m")
             else:
-                alpha = 0.5
+                alpha = self.blend_alpha
                 T_curr = get_transform_matrix_2d(self.latest_odom_tf)
                 T_new = get_transform_matrix_2d(new_msg)
                 
@@ -230,7 +244,9 @@ class FollowerDetectorNode(Node):
                 self.latest_odom_tf = matrix_to_transform_msg_2d(T_blend, 'TB3_1/odom', 'TB3_2/odom', now)
                 
         except Exception as e:
-            pass
+            self.get_logger().warn(
+                f'scan2_callback error: {e}',
+                throttle_duration_sec=2.0)
 
     def publish_tf(self):
         now = self.get_clock().now().to_msg()

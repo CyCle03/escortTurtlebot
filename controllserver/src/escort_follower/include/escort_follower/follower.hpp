@@ -73,8 +73,10 @@ private:
   double goal_update_distance_threshold_;
   double goal_update_min_period_sec_;
   double tf_timeout_sec_;
+  double recovery_resend_period_sec_;
   rclcpp::Time last_goal_sent_time_;
   rclcpp::Time last_tf_success_time_;
+  rclcpp::Time last_recovery_goal_sent_time_;
   bool is_in_recovery_mode_;
   std::string tracking_frame_;
 };

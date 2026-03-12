@@ -28,6 +28,7 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
   One-time initial forward step distance toward the generated target.
 - `publish_odom_bridge` (bool, default: `true`)
   Enable internal TF bridge publishing (`leader/odom -> follower/odom`).
+  > **Note:** Set to `false` in `escort_follower.launch.py` since `follower_detector_node` handles TF publishing via ICP scan matching.
 - `goal_update_distance_threshold` (double, default: `0.03`)
   Minimum target change before sending a new `FollowPath` goal.
 - `goal_update_min_period_sec` (double, default: `0.3`)
@@ -35,11 +36,17 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py \
 - `use_sim_time` (bool, default: `false`)
   Use simulation clock.
 - `tf_timeout_sec` (double, default: `2.0`)
-  Time (in seconds) to wait after losing the leader's TF before entering Recovery Mode (Wait at last known position).
+  Seconds without a valid leader TF before entering Recovery Mode.
+- `recovery_resend_period_sec` (double, default: `3.0`)
+  While in Recovery Mode, re-send the "go to last known position" goal every N seconds.
+  Prevents the follower from stopping if Nav2 silently drops the goal.
 
 ## Notes
-- TF lookup failures are skipped safely (no stale goal resend on TF miss).
+- TF lookup failures are skipped safely; an error is logged via `WARN` (throttled) for debugging.
 - Goal updates are rate-limited and change-filtered to reduce Nav2 action spam.
+- **Recovery Mode:** when the leader's TF is lost for `tf_timeout_sec`, the follower navigates to
+  the leader's last known position and **re-sends the goal every `recovery_resend_period_sec`** seconds
+  until the leader is found again.
 - Distance sensing/calculation reference:
   - `docs/distance_measurement_reference.md`
 
@@ -68,13 +75,18 @@ ros2 launch escort_turtlebot_pkg escort_follower.launch.py follow_distance:=0.5 
 - `follow_distance` (기본값 `0.5`): 리더 진행 방향 기준 뒤쪽 목표점 오프셋
 - `initial_step_distance` (기본값 `0.0`): follower의 1회 초기 전진 거리
 - `publish_odom_bridge` (기본값 `true`): 내부 TF 브리지(`leader/odom -> follower/odom`) 사용 여부
+  > **참고:** `escort_follower.launch.py`에서는 `follower_detector_node`가 ICP로 TF를 발행하므로 `false`로 설정됩니다.
 - `goal_update_distance_threshold` (기본값 `0.03`): 새 goal 전송을 위한 최소 목표 변화량
 - `goal_update_min_period_sec` (기본값 `0.3`): goal 전송 최소 주기(초)
 - `use_sim_time` (기본값 `false`): 시뮬레이션 시간 사용 여부
-- `tf_timeout_sec` (기본값 `2.0`): 리더의 위치(TF)를 잃어버렸을 때 복구 모드(마지막 위치 찾기)로 진입하기까지 대기하는 시간(초)
+- `tf_timeout_sec` (기본값 `2.0`): 리더의 위치(TF)를 잃어버렸을 때 복구 모드 진입까지 대기 시간(초)
+- `recovery_resend_period_sec` (기본값 `3.0`): 복구 모드 중 "마지막 위치로 이동" 목표를 재전송하는 주기(초)
+  Nav2가 목표를 조용히 삭제해도 팔로워가 멈추지 않도록 보장합니다.
 
 ### 참고
-- TF 조회 실패 시 goal 전송을 건너뛰도록 처리되어 있습니다.
+- TF 조회 실패 시 `WARN` 로그(Throttled)로 기록되며 goal 전송은 건너뜁니다.
 - goal 전송은 변화량/주기 필터가 적용되어 액션 과전송을 줄입니다.
+- **복구 모드:** 리더 TF가 `tf_timeout_sec` 이상 끊기면 마지막 알려진 위치로 이동하고,
+  `recovery_resend_period_sec` 주기마다 목표를 재전송하여 리더가 돌아올 때까지 대기합니다.
 - 거리 인식/계산 참고 문서:
   - `docs/distance_measurement_reference.md`

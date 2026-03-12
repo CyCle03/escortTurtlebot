@@ -31,8 +31,6 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     follow_distance = LaunchConfiguration('follow_distance')
     initial_step_distance = LaunchConfiguration('initial_step_distance')
-    odom_bridge_x = LaunchConfiguration('odom_bridge_x')
-    odom_bridge_y = LaunchConfiguration('odom_bridge_y')
 
     follower = Node(
         package='escort_follower',
@@ -123,20 +121,6 @@ def generate_launch_description():
             'initial_step_distance',
             default_value='0.0',
             description='Initial one-time forward step distance toward target (meters)'
-        )
-    )
-    ld.add_action(
-        DeclareLaunchArgument(
-            'odom_bridge_x',
-            default_value='-0.50',
-            description='Static TF x offset from TB3_1/odom to TB3_2/odom'
-        )
-    )
-    ld.add_action(
-        DeclareLaunchArgument(
-            'odom_bridge_y',
-            default_value='0.0',
-            description='Static TF y offset from TB3_1/odom to TB3_2/odom'
         )
     )
     ld.add_action(tf_bridge_node)

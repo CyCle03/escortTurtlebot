@@ -11,7 +11,6 @@ The launch files (e.g., `escort_sim.launch.py` and `escort_real.launch.py`) acce
 | `use_sim_time` | bool | `False` (Real), `True` (Sim) | **Crucial:** Set to `False` when running on physical TurtleBots. If set incorrectly, TF and sensor messages will freeze waiting for Gazebo's clock. |
 | `number_of_follower` | int | 1 | The number of followers. Expandable for convoy setups. |
 | `follow_distance` | double | `0.5` | The target distance (in meters) the follower tries to maintain strictly behind the leader. |
-| `odom_bridge_x` | double | `-0.5` | The initial presumed offset distance between the leader and follower when the ICP scan matching first kicks in. |
 
 ## Network & Middleware Configurations
 
@@ -30,7 +29,8 @@ The follower behavior logic exposes parameters to fine-tune how aggressively it 
 
 - `goal_update_distance_threshold` (`0.03` m): The follower will not send a new Nav2 goal if the leader hasn't moved at least 3cm. This prevents rapid-fire goal spamming and jittering.
 - `goal_update_min_period_sec` (`0.3` s): The follower will wait at least 0.3 seconds before sending a new target, giving the Nav2 controller enough time to process and accelerate.
-- `tf_timeout_sec` (`2.0` s): If the leader's position is not updated via TF for 2.0 seconds (e.g., due to occlusion or network drop), the follower aborts the current tracking and enters **Recovery Mode** (Waiting at the last known position).
+- `tf_timeout_sec` (`2.0` s): If the leader's position is not updated via TF for 2.0 seconds (e.g., due to occlusion or network drop), the follower enters **Recovery Mode**.
+- `recovery_resend_period_sec` (`3.0` s): While in Recovery Mode, the "go to last known position" goal is **re-sent every 3 seconds**. This prevents the follower from stopping if Nav2 internally drops a goal after completing it or failing silently.
 
 ## Nav2 Controller Configurations (`param/escort_controll_server1.yaml`)
 
@@ -39,6 +39,15 @@ The `dwb_core::DWBLocalPlanner` on the follower is specifically tuned for smooth
 - `min_vel_x: -0.12`: Allows the follower to reverse slowly if the leader stops abruptly or if the gap becomes too tight. Setting this to `0.0` would force the follower to spin 180 degrees to back up, which looks unnatural.
 - `BaseObstacle.scale: 0.02`: The local costmap obstacle avoidance is set relatively low. Since the follower is closely tailing the leader, if the obstacle repulsion weight is too high, the follower might view the leader itself as an obstacle and refuse to approach it.
 - `PathDist.scale: 32.0`: The follower heavily prioritizes sticking to the exact path generated towards the leader.
+
+---
+
+## Follower Detector Node Parameters (`follower_detector_node.py`)
+
+The `follower_detector_node` performs ICP (Iterative Closest Point) scan matching to synchronize the `TB3_1/odom` and `TB3_2/odom` coordinate frames in real-time.
+
+- `icp_fitness_threshold` (`0.3`): Minimum ICP match quality score (0–1) required to accept a new TF estimate. Raise this value if false-positive matches cause unstable tracking; lower it in low-feature environments. Default was `0.15`, raised to `0.3` for better robustness in real-world use.
+- `blend_alpha` (`0.5`): Blending ratio between the previous TF estimate and the new ICP result. `0.0` means no update (keep old), `1.0` means fully adopt the new ICP result. Increase toward `0.7` for faster responsiveness; decrease toward `0.3` for smoother filtering.
 
 ---
 
@@ -55,7 +64,6 @@ The `dwb_core::DWBLocalPlanner` on the follower is specifically tuned for smooth
 | `use_sim_time` | bool | `False` (실제), `True` (시뮬레이션) | **매우 중요:** 실제 물리적인 터틀봇을 구동할 때는 반드시 `False`로 설정해야 합니다. 잘못 설정하면 로봇이 존재하지 않는 Gazebo 가상 시계를 기다리느라 모든 센서 데이터와 TF가 멈춰버립니다. |
 | `number_of_follower` | int | 1 | 팔로워 로봇의 수입니다. 기차(Convoy) 대형으로 확장할 때 사용합니다. |
 | `follow_distance` | double | `0.5` | 팔로워가 리더의 바로 뒤쪽에서 유지하려고 하는 목표 추종 거리(미터)입니다. |
-| `odom_bridge_x` | double | `-0.5` | 시스템 시작 시, ICP 스캔 매칭이 초기 보정을 수행하기 전에 가정하는 두 로봇 간의 대략적인 오프셋 거리입니다. |
 
 ### 네트워크 및 통신 미들웨어 설정
 
@@ -74,7 +82,15 @@ export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
 
 - `goal_update_distance_threshold` (`0.03` m): 리더가 최소 3cm 이상 이동하지 않으면 팔로워는 새로운 목표점(Goal)을 전송하지 않습니다. 목표점이 너무 자주 갱신되어 로봇이 파르르 떨리는 현상(Jittering)을 방지합니다.
 - `goal_update_min_period_sec` (`0.3` s): 팔로워는 Nav2 제어기가 가속도를 계산하고 반영할 수 있도록, 새로운 목표점을 보내기 전에 최소 0.3초를 대기합니다.
-- `tf_timeout_sec` (`2.0` s): 장애물에 가려지거나 네트워크 끊김으로 인해 리더의 위치(TF)를 2.0초 이상 갱신받지 못하면, 팔로워는 즉시 현재 추종을 멈추고 **복구 모드(Recovery Mode)** 로 진입하여 리더가 마지막으로 목격된 위치로 가서 대기합니다.
+- `tf_timeout_sec` (`2.0` s): 장애물에 가려지거나 네트워크 끊김으로 인해 리더의 위치(TF)를 2.0초 이상 갱신받지 못하면, 팔로워는 즉시 현재 추종을 멈추고 **복구 모드(Recovery Mode)**로 진입합니다.
+- `recovery_resend_period_sec` (`3.0` s): 복구 모드 지속 중 "마지막 알려진 위치로 이동" 목표를 **3초마다 재전송**합니다. Nav2가 목표를 완료 후 조용히 삭제하더라도 팔로워가 멈추지 않도록 보장합니다.
+
+### Follower Detector 노드 파라미터 (`follower_detector_node.py`)
+
+ICP 스캔 매칭으로 `TB3_1/odom`과 `TB3_2/odom` 좌표계를 실시간 동기화하는 노드의 파라미터입니다.
+
+- `icp_fitness_threshold` (`0.3`): ICP 매칭 결과를 수용하기 위한 최소 품질 점수(0~1). 허위 매칭(False-positive)으로 위치가 불안정하면 이 값을 높이고, 특징이 적은 환경에서는 낮추세요. 기존 `0.15`에서 실환경 안정성을 위해 `0.3`으로 상향되었습니다.
+- `blend_alpha` (`0.5`): 이전 TF 추정값과 새 ICP 결과를 혼합하는 비율. `0.0`이면 업데이트 없음(이전값 유지), `1.0`이면 ICP 결과를 그대로 사용합니다. 응답성을 높이려면 `0.7`로 올리고, 더 부드러운 필터링을 원하면 `0.3`으로 낮추세요.
 
 ### Nav2 로컬 제어기 설정 (`param/escort_controll_server1.yaml`)
 
