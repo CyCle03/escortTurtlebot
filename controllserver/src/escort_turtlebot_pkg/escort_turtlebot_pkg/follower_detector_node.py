@@ -135,9 +135,13 @@ class FollowerDetectorNode(Node):
         self.declare_parameter('icp_fitness_threshold', 0.3)
         # 이전 TF와 새 ICP 결과를 혼합하는 비율 (0=이전값 유지, 1=ICP 결과 그대로 사용)
         self.declare_parameter('blend_alpha', 0.5)
+        # TB3_1 스캔이 이 시간(초) 이상 수신되지 않으면 스텍일 스캔으로 지잡하여
+        # 마지막 유효한 bridge TF를 보존하기 위해 ICP를 건너댅
+        self.declare_parameter('scan1_timeout_sec', 1.0)
 
         self.icp_fitness_threshold = self.get_parameter('icp_fitness_threshold').value
         self.blend_alpha = self.get_parameter('blend_alpha').value
+        self.scan1_timeout_sec = self.get_parameter('scan1_timeout_sec').value
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -157,20 +161,35 @@ class FollowerDetectorNode(Node):
             
         self.latest_odom_tf = None
         self.latest_scan1 = None
+        self.latest_scan1_stamp = None  # TB3_1 스캔 마지막 수신 시각 (스텍일 감지용)
         self.timer = self.create_timer(0.05, self.publish_tf)
         self.get_logger().info(
             f"ICP Scan Matching Follower detector initialized! "
             f"(fitness_threshold={self.icp_fitness_threshold:.2f}, "
-            f"blend_alpha={self.blend_alpha:.2f})")
+            f"blend_alpha={self.blend_alpha:.2f}, "
+            f"scan1_timeout={self.scan1_timeout_sec:.1f}s)")
 
     def scan1_callback(self, msg):
         pts = scan_to_points(msg, max_range=3.5)
         if len(pts) > 10:
             self.latest_scan1 = pts
+            self.latest_scan1_stamp = self.get_clock().now()  # 수신 시각 기록
 
     def scan2_callback(self, msg):
         if self.latest_scan1 is None:
             return
+
+        # TB3_1 스캔이 오래된 데이터인지 확인 (리더봇 소실 감지)
+        if self.latest_scan1_stamp is not None:
+            scan1_age = (self.get_clock().now() - self.latest_scan1_stamp).nanoseconds / 1e9
+            if scan1_age > self.scan1_timeout_sec:
+                # 스텍일 스캔으로 ICP를 실행하면 bridge TF가 오염될 수 있음
+                # 마지막 유효한 TF를 publish_tf()로 유지하고 걱너델
+                self.get_logger().warn(
+                    f'TB3_1/scan not received for {scan1_age:.1f}s '
+                    '(리더봇 소실 추정). 마지막 bridge TF를 보존합니다.',
+                    throttle_duration_sec=2.0)
+                return
             
         pts2 = scan_to_points(msg, max_range=3.5)
         if len(pts2) < 10:

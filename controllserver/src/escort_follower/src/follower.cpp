@@ -32,6 +32,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   has_prior_target_pose_(false),
   awaiting_goal_response_(false),
   applied_initial_step_(false),
+  has_last_known_follower_pose_(false),
   last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
   last_tf_success_time_(0, 0, this->get_clock()->get_clock_type()),
   last_recovery_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
@@ -137,11 +138,22 @@ bool Follower::get_target_pose()
       tracking_frame_,
       this->follower_name_ + "/base_footprint",
       tf2::TimePointZero);
+    // 팩로워 위치를 캐시에 저장 (Recovery 시 팩로워 TF 다운 때 사용)
+    this->last_known_follower_pose_ = this->follower_pose_in_tracking_frame_;
+    this->has_last_known_follower_pose_ = true;
   } catch (const tf2::TransformException & ex) {
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 2000,
       "Waiting for follower TF in tracking frame '%s'", tracking_frame_.c_str());
-    return false;
+    if (!has_last_known_follower_pose_) {
+      // 캐시도 없으면 스케줄링 불가
+      return false;
+    }
+    // 캐시된 팩로워 위치를 사용하여 Recovery가 진행될 수 있도록 허용
+    RCLCPP_WARN_THROTTLE(
+      this->get_logger(), *this->get_clock(), 5000,
+      "Follower TF unavailable, using cached pose for recovery.");
+    this->follower_pose_in_tracking_frame_ = this->last_known_follower_pose_;
   }
 
   return leader_ok;
@@ -212,10 +224,17 @@ void Follower::send_path()
   const double follower_y = this->follower_pose_in_tracking_frame_.transform.translation.y;
 
   if (trigger_recovery_now) {
+    // Recovery: 리더 마지막 확인 위치로 이동
     second_target_pose.pose.position.x = this->last_known_leader_pose_.transform.translation.x;
     second_target_pose.pose.position.y = this->last_known_leader_pose_.transform.translation.y;
     second_target_pose.pose.orientation = this->last_known_leader_pose_.transform.rotation;
     last_recovery_goal_sent_time_ = this->get_clock()->now();
+    // Recovery 첫 번째 waypoint: 이전 목표점 또는 팩로워 마지막 알려진 위치
+    if (!has_prior_target_pose_ && has_last_known_follower_pose_) {
+      first_target_pose.pose.position.x = this->last_known_follower_pose_.transform.translation.x;
+      first_target_pose.pose.position.y = this->last_known_follower_pose_.transform.translation.y;
+      first_target_pose.pose.orientation = this->last_known_follower_pose_.transform.rotation;
+    }
   } else {
     // Normal hybrid target generation
     const double leader_x = this->leader_pose_in_tracking_frame_.transform.translation.x;
