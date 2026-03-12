@@ -81,7 +81,7 @@ bool Follower::get_target_pose()
       tracking_frame_,
       this->leader_name_ + "/base_footprint",
       tf2::TimePointZero);
-    
+
     this->last_known_leader_pose_ = this->leader_pose_in_tracking_frame_;
     this->last_tf_success_time_ = this->get_clock()->now();
     if (this->is_in_recovery_mode_) {
@@ -212,7 +212,7 @@ void Follower::send_path()
     const double dx = target_x - follower_x;
     const double dy = target_y - follower_y;
     const double target_distance = std::hypot(dx, dy);
-    
+
     if (target_distance > 1e-6) {
       if (!applied_initial_step_ && initial_step_distance_ > 0.0) {
         const double step = std::min(initial_step_distance_, target_distance);
