@@ -17,3 +17,4 @@
 - `best.pt`: 초기 마스크 학습 데이터 모델        0번 "with_mask", 1번 "without_mask", 2번 "mask_weared_incorrect"
 - `last.pt`: 마스크, 핸드폰, 손 3종 학습 최종 모델
 - `best_full_integer_quant.tflite`: 라즈베리 파이에서 돌리려고 가볍게 변환한 모델 (X)
+- `last_openvino_model`: 폴더안에 last.bin , last.xml, metadata.yaml
