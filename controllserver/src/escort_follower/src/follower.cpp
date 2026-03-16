@@ -44,7 +44,7 @@ bool FollowerCore::get_target_pose(
       tf2::TimePointZero);
     return true;
   } catch (const tf2::TransformException & ex) {
-    // RCLCPP_WARN_THROTTLE is not available here, the caller (ROS node) should log.
+    // RCLCPP_WARN_THROTTLE은 여기에서 사용할 수 없으므로 호출자(ROS 노드)가 기록해야 합니다.
   }
   return false;
 }
@@ -134,7 +134,7 @@ bool Follower::get_target_pose()
       tracking_frame_,
       this->follower_name_ + "/base_footprint",
       tf2::TimePointZero);
-    // 팩로워 위치를 캐시에 저장 (Recovery 시 팩로워 TF 다운 때 사용)
+    // 팔로워 위치를 캐시에 저장 (Recovery 시 팔로워 TF 다운 때 사용)
     this->last_known_follower_pose_ = this->follower_pose_in_tracking_frame_;
     this->has_last_known_follower_pose_ = true;
   } catch (const tf2::TransformException & ex) {
@@ -145,7 +145,7 @@ bool Follower::get_target_pose()
       // 캐시도 없으면 스케줄링 불가
       return false;
     }
-    // 캐시된 팩로워 위치를 사용하여 Recovery가 진행될 수 있도록 허용
+    // 캐시된 팔로워 위치를 사용하여 Recovery가 진행될 수 있도록 허용
     RCLCPP_WARN_THROTTLE(
       this->get_logger(), *this->get_clock(), 5000,
       "Follower TF unavailable, using cached pose for recovery.");
@@ -175,7 +175,7 @@ void Follower::sonar_callback(const std_msgs::msg::Float32::SharedPtr msg)
     if (is_emergency_) {
       RCLCPP_INFO(this->get_logger(), "Obstacle cleared. Resuming tracking.");
       is_emergency_ = false;
-      // Publish stop before resuming to avoid sudden movements if any buffer remains
+      // 버퍼에 남아있는 움직임으로 인한 갑작스러운 움직임을 피하기 위해 재개하기 전에 정지를 게시합니다.
       cmd_vel_pub_->publish(geometry_msgs::msg::Twist());
     }
   }
@@ -255,14 +255,14 @@ void Follower::send_path()
     second_target_pose.pose.position.y = this->last_known_leader_pose_.transform.translation.y;
     second_target_pose.pose.orientation = this->last_known_leader_pose_.transform.rotation;
     last_recovery_goal_sent_time_ = this->get_clock()->now();
-    // Recovery 첫 번째 waypoint: 이전 목표점 또는 팩로워 마지막 알려진 위치
+    // Recovery 첫 번째 waypoint: 이전 목표점 또는 팔로워 마지막 알려진 위치
     if (!has_prior_target_pose_ && has_last_known_follower_pose_) {
       first_target_pose.pose.position.x = this->last_known_follower_pose_.transform.translation.x;
       first_target_pose.pose.position.y = this->last_known_follower_pose_.transform.translation.y;
       first_target_pose.pose.orientation = this->last_known_follower_pose_.transform.rotation;
     }
   } else {
-    // Normal hybrid target generation
+    // 일반 하이브리드 대상 생성
     const double leader_x = this->leader_pose_in_tracking_frame_.transform.translation.x;
     const double leader_y = this->leader_pose_in_tracking_frame_.transform.translation.y;
     const auto & leader_q_msg = this->leader_pose_in_tracking_frame_.transform.rotation;

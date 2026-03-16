@@ -64,16 +64,16 @@ class LeaderInitialMoveNode(Node):
             return
 
         if not self.active:
-            # Wait until startup delay elapses.
+            # 시작 지연이 경과할 때까지 기다립니다.
             return
 
-        # Wait for a live subscriber and odom before starting actual motion.
+        # 실제 모션을 시작하기 전에 라이브 구독자와 odom을 기다립니다.
         if self.cmd_pub.get_subscription_count() < 1:
             return
         if self.current_x is None:
             return
 
-        # Capture start pose once when motion really starts.
+        # 모션이 실제로 시작되면 시작 포즈를 한 번 캡처합니다.
         if not self.motion_started:
             self.start_x = self.current_x
             self.start_y = self.current_y

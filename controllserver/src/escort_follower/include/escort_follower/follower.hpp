@@ -73,7 +73,7 @@ private:
   geometry_msgs::msg::TransformStamped leader_pose_in_tracking_frame_;
   geometry_msgs::msg::TransformStamped follower_pose_in_tracking_frame_;
   geometry_msgs::msg::TransformStamped last_known_leader_pose_;
-  geometry_msgs::msg::TransformStamped last_known_follower_pose_;  // Recovery 시 팩로워 위치 백업
+  geometry_msgs::msg::TransformStamped last_known_follower_pose_;  // Recovery 시 팔로워 위치 백업
   geometry_msgs::msg::PoseStamped prior_second_target_pose_;
   geometry_msgs::msg::PoseStamped last_sent_second_target_pose_;
   rclcpp::TimerBase::SharedPtr send_path_timer_;
@@ -91,7 +91,7 @@ private:
   bool has_prior_target_pose_;
   bool awaiting_goal_response_;
   bool applied_initial_step_;
-  bool has_last_known_follower_pose_;  // 팩로워 위치 캐시 유효 여부
+  bool has_last_known_follower_pose_;  // 팔로워 위치 캐시 유효 여부
   bool is_emergency_;
   double follow_distance_;
   double initial_step_distance_;
