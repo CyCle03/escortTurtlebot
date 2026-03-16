@@ -55,7 +55,7 @@ class EscortGuiNode(Node):
         )
 
         # cmd_vel publisher
-        self.cmd_pub = self.create_publisher(Twist, '/cmd_vel', 10)
+        self.cmd_pub = self.create_publisher(Twist, '/TB3_1/cmd_vel', 10)
 
     # -----------------------------
     # mask callback
