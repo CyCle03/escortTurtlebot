@@ -7,7 +7,7 @@ def generate_launch_description():
     vision_node = ExecuteProcess(
         cmd=[
             'python3',
-            '/home/robot/robot_ws/src/escort_robot/escort_vision_node.py'
+            '/home/ubuntu/robot_ws/src/escort_robot/escort_vision_node.py'
         ],
         output='screen'
     )
@@ -15,7 +15,7 @@ def generate_launch_description():
     gui_node = ExecuteProcess(
         cmd=[
             'python3',
-            '/home/robot/robot_ws/src/escort_robot/escort_turtlebot_gui.py'
+            '/home/ubuntu/robot_ws/src/escort_robot/escort_turtlebot_gui.py'
         ],
         output='screen'
     )
