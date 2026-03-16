@@ -19,6 +19,7 @@ Python launch/bridge integration package for escort simulation and runtime orche
 - Intelligent Recovery Behavior (`Wait at Last Known Position`):
   - If the leader (`{leader_name}`) is occluded or TF tracking is lost, the follower (`{follower_name}`) cancels its current goal.
   - The follower navigates to the leader's actual last known position. While waiting, it **re-sends the goal periodically** (`recovery_resend_period_sec`) to prevent Nav2 from silently dropping it.
+- **Enhanced Safety**: Follower now supports ultrasonic-based emergency obstacle avoidance.
 
 ## Nodes Overview
 
@@ -130,6 +131,7 @@ ros2 run turtlebot3_teleop teleop_keyboard --ros-args -r cmd_vel:=/{leader_name}
 - 지능형 예외 상황 복구 행동 (`Wait at Last Known Position`)
   - 통신 단절이나 장애물 가림(Occlusion) 등으로 리더 로봇(`{leader_name}`)의 위치 정보(TF)를 놓칠 경우, 팔로워(`{follower_name}`)는 즉시 추종을 멈춥니다.
   - 리더 로봇이 마지막으로 목격된 위치로 이동하여 대기하며, **`recovery_resend_period_sec` 주기마다 목표를 재전송**하여 리더가 다시 발견될 때까지 안정적으로 대기합니다.
+- **안전성 강화**: 팔로워 로봇에 초음파 기반 긴급 장애물 회피 기능이 추가되었습니다.
 
 ### 주요 노드 (Nodes Overview)
 

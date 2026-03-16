@@ -61,6 +61,8 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   awaiting_goal_response_(false),
   applied_initial_step_(false),
   has_last_known_follower_pose_(false),
+  is_emergency_(false),
+  sonar_dist_(999.0),
   last_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
   last_tf_success_time_(0, 0, this->get_clock()->get_clock_type()),
   last_recovery_goal_sent_time_(0, 0, this->get_clock()->get_clock_type()),
@@ -97,6 +99,12 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
   send_path_timer_ = this->create_wall_timer(
     std::chrono::milliseconds(100),
     std::bind(&Follower::send_path, this));
+
+  ultrasonic_sub_ = this->create_subscription<std_msgs::msg::Float32>(
+    "/ultrasonic_distance", 10, std::bind(&Follower::sonar_callback, this, std::placeholders::_1));
+
+  cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
+    follower_name_ + "/cmd_vel", 10);
 
   RCLCPP_INFO(
     this->get_logger(),
@@ -147,8 +155,38 @@ bool Follower::get_target_pose()
   return leader_ok;
 }
 
+void Follower::sonar_callback(const std_msgs::msg::Float32::SharedPtr msg)
+{
+  sonar_dist_ = msg->data;
+  if (sonar_dist_ <= 10.0) {
+    if (!is_emergency_) {
+      RCLCPP_WARN(this->get_logger(), "Emergency reverse! (Distance: %.1f cm)", sonar_dist_);
+      is_emergency_ = true;
+      if (active_goal_handle_) {
+        this->nav2_action_client_->async_cancel_goal(active_goal_handle_);
+        active_goal_handle_.reset();
+      }
+    }
+    geometry_msgs::msg::Twist twist;
+    twist.linear.x = -0.07;
+    twist.angular.z = 0.0;
+    cmd_vel_pub_->publish(twist);
+  } else {
+    if (is_emergency_) {
+      RCLCPP_INFO(this->get_logger(), "Obstacle cleared. Resuming tracking.");
+      is_emergency_ = false;
+      // Publish stop before resuming to avoid sudden movements if any buffer remains
+      cmd_vel_pub_->publish(geometry_msgs::msg::Twist());
+    }
+  }
+}
+
 void Follower::send_path()
 {
+  if (is_emergency_) {
+    return;
+  }
+
   bool leader_visible = get_target_pose();
   bool trigger_recovery_now = false;
 

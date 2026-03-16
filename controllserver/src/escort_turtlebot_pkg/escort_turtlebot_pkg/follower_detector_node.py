@@ -142,7 +142,7 @@ class FollowerDetectorNode(Node):
         self.declare_parameter('follower_name', 'TB3_2')
 
         # ICP 매칭 품질 임계값: 이 값 이상이어야 TF 업데이트에 사용
-        self.declare_parameter('icp_fitness_threshold', 0.3)
+        self.declare_parameter('icp_fitness_threshold', 0.15)
         # 이전 TF와 새 ICP 결과를 혼합하는 비율 (0=이전값 유지, 1=ICP 결과 그대로 사용)
         self.declare_parameter('blend_alpha', 0.5)
         # 스캔이 이 시간(초) 이상 수신되지 않으면 stale 스캔으로 간주하여
@@ -224,6 +224,7 @@ class FollowerDetectorNode(Node):
             return
 
         try:
+            # TF 동기화를 위해 각 로봇의 odom->scan 변환 조회
             T_odom1_scan1_msg = self.tf_buffer.lookup_transform(
                 f'{self.leader_name}/odom', f'{self.leader_name}/base_scan',
                 rclpy.time.Time(), timeout=rclpy.duration.Duration(seconds=0.1))
@@ -307,9 +308,10 @@ class FollowerDetectorNode(Node):
                         throttle_duration_sec=2.0)
                     return
 
-            now = self.get_clock().now().to_msg()
+            # CRITICAL: TF 발행 시 센서 데이터의 타임스탬프를 사용하여 동기화 에러 해결
+            msg_stamp = msg.header.stamp
             new_msg = matrix_to_transform_msg_2d(
-                T_odom1_odom2_new, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
+                T_odom1_odom2_new, f'{self.leader_name}/odom', f'{self.follower_name}/odom', msg_stamp)
 
             if self.latest_odom_tf is None:
                 self.latest_odom_tf = new_msg
@@ -341,7 +343,7 @@ class FollowerDetectorNode(Node):
                 ])
 
                 self.latest_odom_tf = matrix_to_transform_msg_2d(
-                    T_blend, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now)
+                    T_blend, f'{self.leader_name}/odom', f'{self.follower_name}/odom', msg_stamp)
 
         except Exception as e:
             self.get_logger().warn(
@@ -349,14 +351,20 @@ class FollowerDetectorNode(Node):
                 throttle_duration_sec=2.0)
 
     def publish_tf(self):
-        now = self.get_clock().now().to_msg()
+        # 타이머 기반 발행 시에는 현재 시간(buffered) 사용
+        now = self.get_clock().now()
+        # Nav2 Message Filter dropping 방지를 위해 아주 약간의 미래 시간을 사용하거나 transform_tolerance 고려
+        # 또는 단순히 센서 타임스탬프가 포함된 최신 TF를 재발행
+        now_msg = now.to_msg()
+        
         if self.latest_odom_tf is not None:
-            self.latest_odom_tf.header.stamp = now
+            # 최신 보정값을 사용하여 현재 시점의 TF 발행
+            self.latest_odom_tf.header.stamp = now_msg
             self.tf_broadcaster.sendTransform(self.latest_odom_tf)
         else:
             new_tf = TransformStamped()
             new_tf.header.frame_id = f'{self.leader_name}/odom'
-            new_tf.header.stamp = now
+            new_tf.header.stamp = now_msg
             new_tf.child_frame_id = f'{self.follower_name}/odom'
             new_tf.transform.translation.x = -0.5
             new_tf.transform.rotation.w = 1.0
