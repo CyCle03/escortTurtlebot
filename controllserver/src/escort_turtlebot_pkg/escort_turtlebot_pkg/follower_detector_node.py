@@ -49,7 +49,10 @@ def matrix_to_transform_msg_2d(T, frame_id, child_frame_id, stamp):
 def scan_to_points(msg, max_range=4.0):
     points = []
     for i, r in enumerate(msg.ranges):
-        if r < msg.range_min or r > min(msg.range_max, max_range) or math.isinf(r) or math.isnan(r):
+        if (r < msg.range_min or
+                r > min(msg.range_max, max_range) or
+                math.isinf(r) or
+                math.isnan(r)):
             continue
         ang = msg.angle_min + i * msg.angle_increment
         x = r * math.cos(ang)
@@ -184,14 +187,15 @@ class FollowerDetectorNode(Node):
         self.prev_init_pose = None      # 팔로워 정지 상태 감지용: 직전 ICP init_pose 저장
         self.timer = self.create_timer(0.05, self.publish_tf)
         self.get_logger().info(
-            f"ICP Scan Matching Follower detector for {self.follower_name} "
-            f"following {self.leader_name} initialized! "
+            f'ICP Scan Matching Follower detector for {self.follower_name} '
+            f'following {self.leader_name} initialized! '
             f'(fitness={self.icp_fitness_threshold:.2f}, '
             f'alpha={self.blend_alpha:.2f}, '
             f'scan_timeout={self.scan_timeout_sec:.1f}s, '
             f'max_corr={self.max_correction_dist:.2f}m/'
             f'{math.degrees(self.max_correction_angle):.0f}deg, '
-            f'odom_thresh={self.odom_motion_threshold:.3f}m)')
+            f'odom_thresh={self.odom_motion_threshold:.3f}m)'
+        )
 
     def scan1_callback(self, msg):
         pts = scan_to_points(msg, max_range=3.5)

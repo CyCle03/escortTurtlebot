@@ -1,7 +1,6 @@
-import rclpy
-import pytest
-
 from escort_turtlebot_pkg.follower_detector_node import FollowerDetectorNode
+import pytest
+import rclpy
 
 
 @pytest.fixture
@@ -29,8 +28,8 @@ def test_subscriptions(follower_detector_node):
     leader_scan_sub = follower_detector_node.subscription1
     follower_scan_sub = follower_detector_node.subscription2
 
-    assert leader_scan_sub is not None, "Leader scan subscription is missing"
-    assert follower_scan_sub is not None, "Follower scan subscription is missing"
+    assert leader_scan_sub is not None, 'Leader scan subscription is missing'
+    assert follower_scan_sub is not None, 'Follower scan subscription is missing'
 
     expected_leader_topic = f'/{leader_name}/scan'
     expected_follower_topic = f'/{follower_name}/scan'

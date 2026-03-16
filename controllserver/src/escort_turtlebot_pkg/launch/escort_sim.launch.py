@@ -50,13 +50,17 @@ def _launch_setup(context):
     actions = []
     actions.append(
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')),
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_gazebo_ros, 'launch', 'gzserver.launch.py')
+            ),
             launch_arguments={'world': world}.items(),
         )
     )
     actions.append(
         IncludeLaunchDescription(
-            PythonLaunchDescriptionSource(os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py'))
+            PythonLaunchDescriptionSource(
+                os.path.join(pkg_gazebo_ros, 'launch', 'gzclient.launch.py')
+            )
         )
     )
     core_launch = IncludeLaunchDescription(
@@ -79,7 +83,9 @@ def _launch_setup(context):
     for count in range(number_of_robots):
         robot_state_publisher_cmd_list.append(
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(os.path.join(gazebo_launch_dir, 'robot_state_publisher.launch.py')),
+                PythonLaunchDescriptionSource(
+                    os.path.join(gazebo_launch_dir, 'robot_state_publisher.launch.py')
+                ),
                 launch_arguments={
                     'use_sim_time': use_sim_time,
                     'frame_prefix': f'{namespace_prefix}_{count + 1}',
@@ -104,7 +110,9 @@ def _launch_setup(context):
 
         spawn_turtlebot_cmd_list.append(
             IncludeLaunchDescription(
-                PythonLaunchDescriptionSource(os.path.join(escort_launch_dir, 'escort_spawn.launch.py')),
+                PythonLaunchDescriptionSource(
+                    os.path.join(escort_launch_dir, 'escort_spawn.launch.py')
+                ),
                 launch_arguments={
                     'x_pose': str(pose[count][0]),
                     'y_pose': str(pose[count][1]),
