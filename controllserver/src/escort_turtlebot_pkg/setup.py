@@ -2,9 +2,10 @@ from glob import glob
 from setuptools import find_packages, setup
 
 package_name = 'escort_turtlebot_pkg'
+dist_name = 'escortturtlebot'
 
 setup(
-    name=package_name,
+    name=dist_name,
     version='0.0.0',
     packages=find_packages(exclude=['test']),
     data_files=[
