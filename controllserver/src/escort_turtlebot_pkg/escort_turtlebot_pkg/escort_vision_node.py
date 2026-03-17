@@ -140,10 +140,22 @@ class EscortGestureMaskNode(Node):
     # 카메라 콜백
     # -------------------------------------------------
     def image_callback(self, msg):
+        if not msg or not msg.data:
+            return
 
-        frame = self.bridge.compressed_imgmsg_to_cv2(msg,'bgr8')
-        frame = cv2.flip(frame,1)
-        frame = cv2.resize(frame,(320,240))
+        try:
+            # Decode compressed image
+            np_arr = np.frombuffer(msg.data, np.uint8)
+            frame = cv2.imdecode(np_arr, cv2.IMREAD_COLOR)
+
+            if frame is None:
+                return
+
+            frame = cv2.flip(frame, 1)
+            frame = cv2.resize(frame, (320, 240))
+        except Exception as e:
+            self.get_logger().error(f"Image processing error: {e}")
+            return
 
         gesture = "STOP"
 
