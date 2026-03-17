@@ -41,8 +41,9 @@ class EscortGestureMaskNode(Node):
         # -----------------------------
         # YOLO mask model
         # -----------------------------
-        self.declare_parameter('model_path', 'yolo_model/best.pt')
+        self.declare_parameter('model_path', os.path.join(os.path.expanduser('~'), 'escort_ws/team_project/best.pt'))
         model_path = self.get_parameter('model_path').get_parameter_value().string_value
+        self.get_logger().info(f"Loading YOLO model from: {model_path}")
         self.model = YOLO(model_path)
 
         self.colors = {
@@ -284,8 +285,8 @@ class EscortGestureMaskNode(Node):
                 2
             )
 
-        cv2.imshow("Escort Turtlebot Vision",frame)
-        cv2.waitKey(1)
+        # cv2.imshow("Escort Turtlebot Vision",frame)
+        # cv2.waitKey(1)
 
 
 # -------------------------------------------------
