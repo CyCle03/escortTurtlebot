@@ -85,7 +85,7 @@ def icp(A, B, init_pose, max_iterations=30, tolerance=0.0001):
 
     for i in range(max_iterations):
         distances, indices = tree.query(src[:2, :].T)
-        valid = distances < 0.4
+        valid = distances < 0.2  # Reduced search radius to prevent jumping (was 0.4)
         if np.sum(valid) < 10:
             break
 
@@ -141,8 +141,8 @@ class FollowerDetectorNode(Node):
         self.declare_parameter('leader_name', 'TB3_1')
         self.declare_parameter('follower_name', 'TB3_2')
 
-        # ICP 매칭 품질 임계값: 이 값 이상이어야 TF 업데이트에 사용
-        self.declare_parameter('icp_fitness_threshold', 0.15)
+        # ICP 매칭 품질 임계값: 이 값 이상이어야 TF 업데이트에 사용 (강화됨: 0.15 -> 0.4)
+        self.declare_parameter('icp_fitness_threshold', 0.4)
         # 이전 TF와 새 ICP 결과를 혼합하는 비율 (0=이전값 유지, 1=ICP 결과 그대로 사용)
         self.declare_parameter('blend_alpha', 0.5)
         # 스캔이 이 시간(초) 이상 수신되지 않으면 stale 스캔으로 간주하여
