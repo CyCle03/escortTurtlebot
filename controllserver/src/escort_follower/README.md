@@ -6,11 +6,11 @@ This package contains the core algorithms for the follower robot to track the le
 
 ## How to Build
 
-This package is part of the `controllserver` workspace. Build the entire workspace from the root directory (`~/escort_ws`):
+This package is part of the `escort_ws` workspace. Build the workspace from the root directory (`~/escort_ws`):
 
 ```bash
 cd ~/escort_ws
-colcon build --packages-up-to escort_follower
+colcon build --packages-select escort_follower
 source install/setup.bash
 ```
 
@@ -32,11 +32,11 @@ This package implements several sophisticated behaviors which are documented sep
 
 ## 빌드 방법
 
-이 패키지는 `controllserver` 워크스페이스의 일부입니다. 워크스페이스의 루트 디렉터리(`~/escort_ws`)에서 전체 워크스페이스를 빌드하세요.
+워크스페이스의 루트 디렉터리(`~/escort_ws`)에서 빌드를 수행합니다.
 
 ```bash
 cd ~/escort_ws
-colcon build --packages-up-to escort_follower
+colcon build --packages-select escort_follower
 source install/setup.bash
 ```
 
