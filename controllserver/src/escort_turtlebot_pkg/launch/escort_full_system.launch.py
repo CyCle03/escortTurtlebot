@@ -1,3 +1,4 @@
+import os
 from launch import LaunchDescription
 from launch_ros.actions import Node
 
@@ -8,7 +9,7 @@ def generate_launch_description():
         executable='escort_vision_node',
         name='escort_vision_node',
         output='screen',
-        parameters=[{'model_path': 'yolo_model/best.pt'}]
+        parameters=[{'model_path': os.path.join(os.path.expanduser('~'), 'escort_ws/team_project/best.pt')}]
     )
 
     gui_node = Node(
