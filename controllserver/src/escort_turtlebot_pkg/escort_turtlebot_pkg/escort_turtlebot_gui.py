@@ -41,6 +41,8 @@ class EscortGuiNode(Node):
             self.image_callback,
             10
         )
+        self.frame_count = 0
+        self.skip_interval = 3 # Update GUI every 3rd frame
 
         # gesture subscriber
         self.create_subscription(
@@ -69,6 +71,10 @@ class EscortGuiNode(Node):
 
 
     def image_callback(self, msg):
+        self.frame_count += 1
+        if self.frame_count % self.skip_interval != 0:
+            return
+
         if not msg or not msg.data:
             return
 

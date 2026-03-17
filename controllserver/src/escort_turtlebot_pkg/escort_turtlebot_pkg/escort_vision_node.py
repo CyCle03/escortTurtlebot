@@ -69,8 +69,11 @@ class EscortGestureMaskNode(Node):
         # 상태 변수
         # -----------------------------
         self.mask_verified = False
+        self.frame_count = 0
+        self.declare_parameter('skip_interval', 3) # Process every 3rd frame by default
+        self.skip_interval = self.get_parameter('skip_interval').get_parameter_value().integer_value
 
-        self.get_logger().info("Escort Turtlebot System Started")
+        self.get_logger().info(f"Escort Turtlebot System Started (Skip interval: {self.skip_interval})")
 
     # -------------------------
     # 각도 계산
@@ -148,6 +151,10 @@ class EscortGestureMaskNode(Node):
     # 카메라 콜백
     # -------------------------------------------------
     def image_callback(self, msg):
+        self.frame_count += 1
+        if self.frame_count % self.skip_interval != 0:
+            return
+
         if not msg or not msg.data:
             return
 
