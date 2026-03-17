@@ -6,7 +6,7 @@ This document explains the key launch arguments and YAML parameters used in the 
 
 Launch files in `launch/` dictate how the simulation starts and orchestrates the robots. The entry point is `escort_sim.launch.py`, which delegates to `escort_core.launch.py`.
 
-### Key Arguments (`escort_sim.launch.py` / `escort_core.launch.py`)
+### Key Arguments (`escort_sim.launch.py` / `escort_core.launch.py` / `escort_real.launch.py`)
 
 -   **`use_sim_time`** (default: `true` / `false` dependent on launch file)
     Instructs ROS 2 nodes to utilize the simulation clock published by Gazebo `/clock` topic. Crucial for TF synchronization in simulation.
@@ -14,6 +14,10 @@ Launch files in `launch/` dictate how the simulation starts and orchestrates the
     The absolute starting coordinates (X, Y) for both robots in the Gazebo `map` frame.
 -   **`odom_bridge_x`**, **`odom_bridge_y`**
     **(Only used if dynamic ICP matching is disabled)** Provides a static, hardcoded TF offset from `TB3_1/odom` to `TB3_2/odom`. The launch script calculates this dynamically using the spawn positions if the ICP node is not utilized.
+
+### Hardware-specific Logic (`escort_real.launch.py`)
+-   **Remote Sonar Execution**
+    When running `escort_real.launch.py`, the system explicitly executes `sonar_pub.py` on the remote follower robot (`TB3_2`) via SSH (`penguin@192.168.0.201`). To ensure the ROS environment is available in the non-interactive SSH shell, it is run with `bash -c "source /opt/ros/humble/setup.bash && python3 ~/sonar_pub.py"`.
 
 ## 2. Follower Detector Parameters (`follower_detector_node`)
 These parameters control the ICP-based scan matching and coordinate synchronization.
@@ -73,7 +77,7 @@ The Follower (`TB3_2`) does not maintain a global map. It only uses a local roll
 
 `launch/` 디렉터리의 런치 파일들은 시뮬레이션을 시작하고 로봇들을 제어하는 방식을 정의합니다. 진입점은 `escort_sim.launch.py`이며, 이는 내부적으로 `escort_core.launch.py`를 호출합니다.
 
-### 주요 인자 (`escort_sim.launch.py` / `escort_core.launch.py`)
+### 주요 인자 (`escort_sim.launch.py` / `escort_core.launch.py` / `escort_real.launch.py`)
 
 -   **`use_sim_time`** (기본값: 런치 파일에 따라 `true` 또는 `false`)
     ROS 2 노드들이 Gazebo의 `/clock` 토픽에서 발행하는 시뮬레이션 시간을 사용하도록 지시합니다. 시뮬레이션 환경 내의 TF 동기화를 위해 필수적인 설정입니다.
@@ -81,6 +85,11 @@ The Follower (`TB3_2`) does not maintain a global map. It only uses a local roll
     Gazebo `map` 프레임 내에서 두 로봇이 스폰될 절대적 시작 좌표(X, Y)입니다.
 -   **`odom_bridge_x`**, **`odom_bridge_y`**
     **(동적 ICP 매칭이 비활성화된 경우에만 사용)** `TB3_1/odom`에서 `TB3_2/odom`로의 정적(고정된) TF 오프셋을 제공합니다. ICP 노드를 사용하지 않는 경우, 런치 스크립트가 로봇의 스폰 좌표를 바탕으로 이 값을 자동으로 계산합니다.
+
+### 실제 하드웨어 전용 로직 (`escort_real.launch.py`)
+-   **원격 초음파 센서 실행**
+    `escort_real.launch.py` 실행 시, SSH(`penguin@192.168.0.201`)를 통해 원격 팔로워 로봇(`TB3_2`)에서 백그라운드로 `sonar_pub.py`를 실행합니다.
+    비대화형 SSH 환경에서는 ROS 환경 변수가 자동으로 적용되지 않으므로, `bash -c "source /opt/ros/humble/setup.bash && python3 ~/sonar_pub.py"` 명령어로 명시적 환경변수 로드 후 스크립트를 올리도록 구성되어 있습니다.
 
 ## 2. Follower Detector 파라미터 (`follower_detector_node`)
 ICP 기반 스캔 매칭 및 좌표계 동기화를 제어하는 파라미터입니다.

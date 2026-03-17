@@ -14,6 +14,7 @@ To improve the safety of the follower robot (`TB3_2`), an ultrasonic sensor is u
      - **Cancel Nav2 Goal**: The active `FollowPath` goal is immediately canceled to prevent the Nav2 controller from fighting the emergency command.
      - **Reverse Command**: A steady reverse velocity of **-0.07 m/s** is published directly to the robot's velocity topic.
      - **Path Suppression**: New path generation and goal sending in `send_path()` are suppressed while in this state.
+     - **Strict Precedence**: Emergency logic acts as an absolute gate (`if/elif` structure). Any target tracking updates are ignored to prevent tracking commands from overriding the reverse sequence.
 4. **Recovery**:
    - If `distance > 10.0 cm`:
      - The emergency flag is cleared.
@@ -45,6 +46,7 @@ To improve the safety of the follower robot (`TB3_2`), an ultrasonic sensor is u
      - **Nav2 목표 취소**: 실행 중인 `FollowPath` 액션 목표를 즉시 취소하여 Nav2 제어기와 긴급 명령이 충돌하는 것을 방지합니다.
      - **후진 명령**: **-0.07 m/s**의 일정한 후진 속도를 로봇의 속도 토픽으로 직접 발행합니다.
      - **경로 생성 억제**: 이 상태가 유지되는 동안 `send_path()`를 통한 새로운 경로 생성 및 목표 전송이 중단됩니다.
+     - **우선순위 강제**: 긴급 회피 로직은 제어 루프 내에서 최상단 우선 조건으로 처리되며(`if/elif` 제어), 이 상태에서는 다른 추종 관련 연산이 무시되어 뒤집어쓰이는 현상을 방지합니다.
 4. **복구**:
    - `거리 > 10.0 cm`인 경우:
      - 긴급 플래그를 해제합니다.
