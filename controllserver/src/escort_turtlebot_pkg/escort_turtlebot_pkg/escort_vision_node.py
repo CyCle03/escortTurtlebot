@@ -3,6 +3,7 @@ import sys
 
 # Workaround for Qt conflict: Load system Qt plugins
 os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = "/usr/lib/x86_64-linux-gnu/qt5/plugins/"
+os.environ["QT_QPA_PLATFORM"] = "offscreen"
 
 import rclpy
 from rclpy.node import Node
