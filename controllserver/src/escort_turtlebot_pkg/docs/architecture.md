@@ -21,7 +21,18 @@ This is arguably the most critical node for multi-robot synchronization. It elim
 -   Subscribes to the LiDAR scan data of both robots (`/TB3_1/scan` and `/TB3_2/scan`).
 -   Uses the **ICP (Iterative Closest Point)** algorithm to continuously match these two point clouds.
 -   By finding how the two point clouds overlap, it calculates the exact relative position and orientation between the leader and follower.
--   **TF Synchronization**: It dynamically computes and broadcasts the transform (`TF`) between `TB3_1/odom` and `TB3_2/odom`. This effectively aligns the follower's local odometry into the leader's global map frame in real-time.
+-  - **TF Synchronization**: It dynamically computes and broadcasts the transform (`TF`) between `TB3_1/odom` and `TB3_2/odom`. This effectively aligns the follower's local odometry into the leader's global map frame in real-time.
+
+**Stability & Robustness (SLAM Safeguards):**
+To prevent the map from "wobbling" or jumping due to bad sensor data:
+- **Motion Gating**: If the follower's odometry shows it's not moving significantly (`odom_motion_threshold`), ICP updates are skipped to avoid introducing noise while stationary.
+- **Correction Limits**: ICP corrections exceeding a certain distance (`max_correction_dist`) are rejected as false positives.
+- **Alpha Blending**: New ICP results are blended with the previous TF bridge state (`blend_alpha`) to ensure smooth transitions.
+- **Stale Data Rejection**: If the leader's scan is not received within a timeout, the system stops updating and maintains the last known valid state.
+
+### Recovery Behaviors
+The system handles edge cases where the leader might be temporarily lost:
+- **Wait at Last Known Position**: If ICP fails to find a high-fitness match or scans are lost, the `follower_detector_node` continues to broadcast the last known valid `TB3_1/odom` -> `TB3_2/odom` transform. This ensures the follower stays put relative to the leader's last known position rather than drifting away or causing a TF disconnect.
 
 ## 3. TF Tree Structure
 
@@ -64,10 +75,21 @@ This complete chain allows the follower robot (`TB3_2/base_footprint`) to have a
 이 노드는 다중 로봇 동기화에 있어 가장 핵심적인 역할을 합니다. 덕분에 시작 시 리더 대비 팔로워 로봇의 물리적 위치를 정확하게 맞출 필요가 사라집니다.
 
 **동작 원리 (ICP LiDAR 매칭):**
--   두 로봇의 LiDAR 스캔 데이터(`/TB3_1/scan`, `/TB3_2/scan`)를 구독합니다.
--   **ICP (Iterative Closest Point)** 알고리즘을 사용해 두 점군(Point Cloud) 데이터를 지속적으로 매칭합니다.
--   두 점군 데이터가 겹쳐지는 방식을 찾아내어, 리더와 팔로워 간의 정확한 상대 위치와 방향을 계산해 냅니다.
--   **TF 동기화**: `TB3_1/odom`과 `TB3_2/odom` 사이의 변환 행렬(`TF`)을 실시간으로 계산하여 방송(Broadcast)합니다. 이를 통해 팔로워의 로컬 오도메트리를 리더의 글로벌 맵 프레임에 맞춰 실시간으로 정렬시킵니다.
+- 두 로봇의 LiDAR 스캔 데이터(`/TB3_1/scan`, `/TB3_2/scan`)를 구독합니다.
+- **ICP (Iterative Closest Point)** 알고리즘을 사용해 두 점군(Point Cloud) 데이터를 지속적으로 비교 및 대조합니다.
+- 두 점군 데이터가 겹쳐지는 형상을 찾아내어, 리더 로봇 대비 팔로워 로봇의 정확한 상대 위치(x, y)와 방향(yaw)을 계산해 냅니다.
+- **TF 동기화**: `TB3_1/odom`과 `TB3_2/odom` 사이의 변환 행렬(`TF`)을 실시간으로 계산하여 방송(Broadcast)합니다. 이를 통해 팔로워의 로컬 오도메트리 좌표계를 리더의 글로벌 맵 프레임에 맞춰 실시간으로 정렬시키며, 결과적으로 팔로워가 맵 서비스 없이도 리더의 맵 상에서 자신의 위치를 파악할 수 있게 합니다.
+
+**안정성 및 강인성 (SLAM 보호 장치):**
+불완전한 센서 데이터로 인해 맵이 흔들리거나 로봇 위치가 튀는 현상을 방지하기 위해 다음과 같은 보호 로직이 적용되었습니다:
+- **이동 기반 제어 (Motion Gating)**: 팔로워 로봇이 정지해 있거나 이동량이 매우 적을 경우(`odom_motion_threshold` 미만), 불필요한 노이즈가 TF 트리에 반영되어 맵을 오염시키는 것을 막기 위해 ICP 업데이트를 건너뜁니다.
+- **보정 범위 제한 (Correction Limits)**: 한 번의 보정으로 변화할 수 있는 최대 거리(`max_correction_dist`)를 제한하여, 갑작스러운 스캔 오류로 인해 로봇 위치가 점프하는 현상을 원천 차단합니다.
+- **알파 블렌딩 (Alpha Blending)**: 새로운 ICP 계산 결과를 이전 TF 상태와 일정 비율(`blend_alpha`)로 부드럽게 혼합하여, 좌표계 이동이 급격하지 않고 매끄럽게 이루어지도록 합니다.
+- **데이터 유효성 타임아웃**: 리더 로봇의 스캔 데이터 소실 시, 잘못된 정합을 시도하는 대신 마지막으로 확인된 유효 상태를 유지합니다.
+
+### 복구 행동 (Recovery Behaviors)
+주행 중 리더 로봇을 일시적으로 놓치거나 센서 데이터가 불안정해지는 예외 상황에 대응합니다:
+- **마지막 위치 대기 (Wait at Last Known Position)**: ICP 매칭 품질(fitness)이 낮거나 리더 로봇의 데이터가 끊겼을 때, `follower_detector_node`는 마지막으로 성공했던 `TB3_1/odom` -> `TB3_2/odom` 변환 값을 계속해서 유지합니다. 이를 통해 팔로워 로봇은 맵 상에서 미아가 되지 않고 리더의 마지막 확인 위치를 기준으로 안정적으로 대기하며 다시 정합이 성공하기를 기다립니다.
 
 ## 3. TF 트리 (TF Tree Structure)
 

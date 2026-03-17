@@ -1,20 +1,40 @@
-# 🐢 escortTurtlebot (에스코트 터틀봇)
+# 🐢 Escort Turtlebot YOLO Model
 
-우리 팀의 리더-팔로워 로봇 프로젝트에서 '눈' 역할을 담당하는 YOLOv8 학습 모델 저장소입니다.
+This repository contains the YOLOv8 models used as the 'eyes' of the leader-follower robot project, specifically trained to detect people and their states.
 
-## 📌 모델 설명
-터틀봇이 사람의 상태를 확인하기 위해 만든 모델.
+## 📌 Model Overview
+The model is designed to facilitate interaction between humans and TurtleBots by identifying VIP status, safety gear, and specific gestures.
 
-## 🏷️ (클래스 번호)
-코딩할 때 `result.box.cls` 찍으면 나오는 번호들이에요. 헷갈리지 마세요!
+## 🏷️ Class Definitions
+Use these class indices when parsing `results.box.cls`:
 
-* **0번: Phone  (인덱스 0)** 
-* **1번: Hand  (인덱스 1)(hands_up)** 
-* **2번: Mask_VIP  (인덱스 2)**
-* 
+| Index | Class Name | Description |
+| :--- | :--- | :--- |
+| **0** | **Phone** | Person holding or using a smartphone. |
+| **1** | **Hands Up** | Hand gesture (e.g., for signaling the robot). |
+| **2** | **Mask VIP** | Identified VIP user wearing a mask. |
 
-## 🛠️ 사용한 파일들
-- `best.pt`: 초기 마스크 학습 데이터 모델        0번 "with_mask", 1번 "without_mask", 2번 "mask_weared_incorrect"
-- `last.pt`: 마스크, 핸드폰, 손 3종 학습 최종 모델
-- `best_full_integer_quant.tflite`: 라즈베리 파이에서 돌리려고 가볍게 변환한 모델 (X)
-- `last_openvino_model`: 폴더안에 last.bin , last.xml, metadata.yaml
+## 🛠️ Artifacts & Models
+- `best.pt`: Initial training weights for mask detection (3 classes: with_mask, without_mask, incorrect).
+- `last.pt`: Final comprehensive model (Phone, HandsUp, Mask_VIP).
+- `last_openvino_model/`: Optimized model for Intel hardware (contains `.bin`, `.xml`, `metadata.yaml`).
+
+---
+
+# 한국어 안내
+
+이 저장소는 에스코트 터틀봇 프로젝트의 시각 인식을 담당하는 YOLOv8 모델을 포함합니다. 이 모델은 로봇 주변의 사람을 감지하고, 상태(VIP 여부, 기기 사용 등)를 파악하기 위해 학습되었습니다.
+
+## 📌 주요 클래스 정의
+코드에서 `result.box.cls`로 반환되는 인덱스 및 상세 설명입니다:
+
+| 인덱스 | 클래스명 | 설명 |
+| :--- | :--- | :--- |
+| **0** | **Phone** | 스마트폰을 손에 들고 있거나 사용 중인 상태. |
+| **1** | **Hands Up** | 손을 머리 위로 든 상태 (로봇 호출 등의 제스처). |
+| **2** | **Mask VIP** | 마스크를 착용한 보호 대상자(VIP). |
+
+## 🛠️ 포함된 모델 파일
+- `last.pt`: Phone, HandsUp, Mask_VIP를 모두 포함하는 최종 통합 학습 모델.
+- `last_openvino_model/`: 인텔 CPU/GPU 환경에서 추론 속도를 높이기 위해 최적화된 OpenVINO 형식 모델.
+- `best.pt`: 초기 단계의 마스크 착용 여부 판별 모델 (with_mask, without_mask 등).

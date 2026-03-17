@@ -11,6 +11,7 @@ C++ package for multi-TurtleBot follower control using TF-relative target genera
 
 ## Build
 ```bash
+# Workspace root is typically escort_ws/controllserver
 cd ~/escort_ws/controllserver
 colcon build --packages-select escort_follower
 source install/setup.bash

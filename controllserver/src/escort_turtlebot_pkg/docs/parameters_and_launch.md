@@ -15,7 +15,21 @@ Launch files in `launch/` dictate how the simulation starts and orchestrates the
 -   **`odom_bridge_x`**, **`odom_bridge_y`**
     **(Only used if dynamic ICP matching is disabled)** Provides a static, hardcoded TF offset from `TB3_1/odom` to `TB3_2/odom`. The launch script calculates this dynamically using the spawn positions if the ICP node is not utilized.
 
-## 2. Nav2 Configuration (`param/escort_controll_server1.yaml`)
+## 2. Follower Detector Parameters (`follower_detector_node`)
+These parameters control the ICP-based scan matching and coordinate synchronization.
+
+- **`icp_fitness_threshold`** (default: `0.15`)
+  Quality threshold for ICP matching. Lower values mean less strict matching.
+- **`blend_alpha`** (default: `0.5`)
+  Smoothing factor for TF updates (0.0 = keep old, 1.0 = use new).
+- **`scan_timeout_sec`** (default: `1.0`)
+  Seconds to wait before considering a LiDAR scan "stale".
+- **`max_correction_dist`** (default: `0.3`)
+  Maximum allowed jump (in meters) for a single ICP correction.
+- **`odom_motion_threshold`** (default: `0.02`)
+  Minimum odometry change required to trigger an ICP update (prevents drift when stationary).
+
+## 3. Nav2 Configuration (`param/escort_controll_server1.yaml`)
 
 This YAML file dictates the behavior of the `nav2_controller` (specifically the Follower's local planner/controller) and the `local_costmap`.
 
@@ -68,12 +82,26 @@ The Follower (`TB3_2`) does not maintain a global map. It only uses a local roll
 -   **`odom_bridge_x`**, **`odom_bridge_y`**
     **(동적 ICP 매칭이 비활성화된 경우에만 사용)** `TB3_1/odom`에서 `TB3_2/odom`로의 정적(고정된) TF 오프셋을 제공합니다. ICP 노드를 사용하지 않는 경우, 런치 스크립트가 로봇의 스폰 좌표를 바탕으로 이 값을 자동으로 계산합니다.
 
-## 2. Nav2 설정 (`param/escort_controll_server1.yaml`)
+## 2. Follower Detector 파라미터 (`follower_detector_node`)
+ICP 기반 스캔 매칭 및 좌표계 동기화를 제어하는 파라미터입니다.
+
+- **`icp_fitness_threshold`** (기본값: `0.15`)
+  ICP 매칭 품질 임계값. 이 값보다 매칭 품질이 높아야 TF 업데이트가 수행됩니다.
+- **`blend_alpha`** (기본값: `0.5`)
+  TF 업데이트 부드러움 조절 계수 (0에 가까울수록 이전 값 유지, 1에 가까울수록 새 결과 반영).
+- **`scan_timeout_sec`** (기본값: `1.0`)
+  라이다 스캔 데이터가 유효하다고 판단하는 최대 시간(초).
+- **`max_correction_dist`** (기본값: `0.3`)
+  단일 ICP 보정으로 허용되는 최대 이동 거리(m). 급격한 위치 튀김을 방지합니다.
+- **`odom_motion_threshold`** (기본값: `0.02`)
+  ICP 업데이트를 트리거하기 위한 최소 오도메트리 변화량(m). 정지 상태에서의 맵 오염을 방지합니다.
+
+## 3. Nav2 설정 (`param/escort_controll_server1.yaml`)
 
 이 YAML 파일은 `nav2_controller` (특히 팔로워의 로컬 플래너/컨트롤러)와 `local_costmap`의 작동 방식을 정의합니다.
 
 ### DWBLocalPlanner (컨트롤러)
-팔로워 로봇은 리더 뒷편의 타겟 지점으로 이동하기 위해 استاندard `dwb_core::DWBLocalPlanner`를 사용합니다.
+팔로워 로봇은 리더 뒷편의 타겟 지점으로 이동하기 위해 표준 `dwb_core::DWBLocalPlanner`를 사용합니다.
 
 -   **속도 제한 (`min_vel_x`, `max_vel_x`)**
     -   `max_vel_x: 0.12`: 전진 속도를 안정적인 수준으로 제한합니다.
