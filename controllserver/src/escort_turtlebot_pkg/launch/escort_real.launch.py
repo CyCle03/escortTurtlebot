@@ -14,6 +14,8 @@ from launch.substitutions import LaunchConfiguration
 def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     number_of_follower = LaunchConfiguration('number_of_follower')
+    odom_bridge_x = LaunchConfiguration('odom_bridge_x')
+    odom_bridge_y = LaunchConfiguration('odom_bridge_y')
 
     launch_dir = os.path.join(get_package_share_directory('escort_turtlebot_pkg'), 'launch')
     core_launch = IncludeLaunchDescription(
@@ -21,6 +23,8 @@ def generate_launch_description():
         launch_arguments={
             'use_sim_time': use_sim_time,
             'number_of_follower': number_of_follower,
+            'odom_bridge_x': odom_bridge_x,
+            'odom_bridge_y': odom_bridge_y,
         }.items(),
     )
     slam_launch = IncludeLaunchDescription(
@@ -43,11 +47,25 @@ def generate_launch_description():
             description='Number of follower robots',
         )
     )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'odom_bridge_x',
+            default_value='-0.50',
+            description='Static TF x offset from TB3_1/odom to TB3_2/odom'
+        )
+    )
+    ld.add_action(
+        DeclareLaunchArgument(
+            'odom_bridge_y',
+            default_value='0.0',
+            description='Static TF y offset from TB3_1/odom to TB3_2/odom'
+        )
+    )
     ld.add_action(core_launch)
     ld.add_action(slam_launch)
 
     sonar_process = ExecuteProcess(
-        cmd=['ssh', 'penguin@192.168.0.201', 'bash', '-c', '"source /opt/ros/humble/setup.bash && python3 ~/sonar_pub.py"'],
+        cmd=['ssh', 'penguin@192.168.0.201', 'bash', '-c', '"export ROS_DOMAIN_ID=116 && source /opt/ros/humble/setup.bash && python3 ~/sonar_pub.py"'],
         output='screen'
     )
     ld.add_action(sonar_process)

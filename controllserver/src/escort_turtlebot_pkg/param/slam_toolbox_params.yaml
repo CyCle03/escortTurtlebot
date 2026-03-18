@@ -14,8 +14,8 @@ slam_toolbox:
     ceres_loss_function: None
 
     # ROS Parameters
-    map_file_name: test_steve
-    map_start_pose: [0.0, -0.5, 0.0]
+    # map_file_name: test_steve
+    # map_start_pose: [0.0, -0.5, 0.0]
     map_start_at_dock: true
 
     # Debug params

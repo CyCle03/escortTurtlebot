@@ -66,7 +66,11 @@ def generate_launch_description():
         executable='follower_detector_node',
         name='follower_detector_node',
         output='screen',
-        parameters=[{'use_sim_time': use_sim_time}]
+        parameters=[{
+            'use_sim_time': use_sim_time,
+            'odom_bridge_x': odom_bridge_x,
+            'odom_bridge_y': odom_bridge_y,
+        }]
     )
 
     ctrl_node = Node(

@@ -54,10 +54,7 @@ class EscortGestureMaskNode(Node):
         )
 
         # YOLO
-        self.declare_parameter('model_path', '/home/penguin/escort_ws/yolo_model/last_openvino_model')
-        model_path = self.get_parameter('model_path').get_parameter_value().string_value
-        self.get_logger().info(f"Loading YOLO model from: {model_path}")
-        self.model = YOLO(model_path)
+        self.model = YOLO("/home/ubuntu/robot_ws/src/escort_robot/last_openvino_model")
 
         # mediapipe
         self.mp_hands = mp.solutions.hands
@@ -147,7 +144,7 @@ class EscortGestureMaskNode(Node):
                 self.mask_pub.publish(mask_msg)
 
             # 디버그 출력
-            # print("Detected:", detected)
+            print("Detected:", detected)
 
             mask = False
             phone = False
@@ -325,14 +322,10 @@ def main():
     gui.show()
 
     timer = QTimer()
-    timer.timeout.connect(lambda: rclpy.spin_once(node, timeout_sec=0) if rclpy.ok() else None)
+    timer.timeout.connect(lambda: rclpy.spin_once(node, timeout_sec=0))
     timer.start(10)
 
-    try:
-        sys.exit(app.exec_())
-    finally:
-        node.destroy_node()
-        rclpy.shutdown()
+    sys.exit(app.exec_())
 
 
 if __name__ == "__main__":

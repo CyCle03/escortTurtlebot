@@ -152,8 +152,9 @@ class FollowerDetectorNode(Node):
         self.declare_parameter('max_correction_dist', 0.3)
         # ICP 결과가 현재 bridge TF 대비 이 각도(rad) 이상 차이가 나면 reject
         self.declare_parameter('max_correction_angle', 0.5)
-        # 팔로워가 이동 중인지 판단하는 init_pose 변화량 임계값(m).
-        # 이 값 이하면 팔로워가 정지한 것으로 간주하고 ICP 업데이트를 건너뜀 (맵 오염 원천 차단)
+        # odom bridge Initial state (x, y offset from TB3_1/odom to TB3_2/odom)
+        self.declare_parameter('odom_bridge_x', -0.5)
+        self.declare_parameter('odom_bridge_y', 0.0)
         self.declare_parameter('odom_motion_threshold', 0.02)
 
         self.leader_name = self.get_parameter('leader_name').value
@@ -164,6 +165,8 @@ class FollowerDetectorNode(Node):
         self.max_correction_dist = self.get_parameter('max_correction_dist').value
         self.max_correction_angle = self.get_parameter('max_correction_angle').value
         self.odom_motion_threshold = self.get_parameter('odom_motion_threshold').value
+        self.odom_bridge_x = self.get_parameter('odom_bridge_x').value
+        self.odom_bridge_y = self.get_parameter('odom_bridge_y').value
 
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
@@ -188,7 +191,7 @@ class FollowerDetectorNode(Node):
         self.timer = self.create_timer(0.05, self.publish_tf)
         self.get_logger().info(
             f'ICP Scan Matching Follower detector for {self.follower_name} initialized! '
-            f'(fitness={self.icp_fitness_threshold:.2f}, alpha={self.blend_alpha:.2f})'
+            f'(leader={self.leader_name}, fitness={self.icp_fitness_threshold:.2f}, alpha={self.blend_alpha:.2f})'
         )
 
     def scan1_callback(self, msg):
@@ -236,7 +239,7 @@ class FollowerDetectorNode(Node):
                     math.atan2(T_scan1_scan2_guess[1, 0], T_scan1_scan2_guess[0, 0])
                 ]
             else:
-                init_pose = [-0.5, 0.0, 0.0]
+                init_pose = [self.odom_bridge_x, self.odom_bridge_y, 0.0]
 
             # --- 팔로워 정지 상태 감지: map 오염 방지 ---
             if self.prev_init_pose is not None:
@@ -314,35 +317,51 @@ class FollowerDetectorNode(Node):
                     T_blend, f'{self.leader_name}/odom', f'{self.follower_name}/odom', msg_stamp)
 
         except Exception as e:
-            pass
+            self.get_logger().error(f'Error in scan callback: {str(e)}')
 
     def publish_tf(self):
         # 타이머 기반 발행 시에는 현재 시간(buffered) 사용
         now = self.get_clock().now()
-        # Nav2 Message Filter dropping 방지를 위해 아주 약간의 미래 시간을 사용하거나 transform_tolerance 고려
-        # 또는 단순히 센서 타임스탬프가 포함된 최신 TF를 재발행
         now_msg = now.to_msg()
         
+        # 리더 로봇의 실제 시각과 GUI 머신 시각 차이 보정 시도
+        try:
+            # 리더의 odom -> base_footprint 변환의 타임스탬프를 가져와서 브릿지 시간으로 사용
+            # (두 로봇 간의 시간 동기화가 완벽하지 않을 때 "Future TF" 에러 방지용)
+            t_leader = self.tf_buffer.lookup_transform(
+                f'{self.leader_name}/odom', f'{self.leader_name}/base_footprint',
+                rclpy.time.Time())
+            now_msg = t_leader.header.stamp
+        except Exception:
+            # 리더 TF를 가져오지 못하면 그냥 GUI 현재 시각 사용
+            pass
+            
         if self.latest_odom_tf is not None:
             # 최신 보정값을 사용하여 현재 시점의 TF 발행
             self.latest_odom_tf.header.stamp = now_msg
             self.tf_broadcaster.sendTransform(self.latest_odom_tf)
         else:
-            new_tf = TransformStamped()
-            new_tf.header.frame_id = f'{self.leader_name}/odom'
-            new_tf.header.stamp = now_msg
-            new_tf.child_frame_id = f'{self.follower_name}/odom'
-            new_tf.transform.translation.x = -0.5
-            new_tf.transform.rotation.w = 1.0
-            self.tf_broadcaster.sendTransform(new_tf)
+            # Initial static bridge using configured parameters
+            T_init = np.identity(3)
+            T_init[0, 2] = self.odom_bridge_x
+            T_init[1, 2] = self.odom_bridge_y
+            default_tf = matrix_to_transform_msg_2d(
+                T_init, f'{self.leader_name}/odom', f'{self.follower_name}/odom', now_msg)
+            self.tf_broadcaster.sendTransform(default_tf)
+            self.get_logger().info(f'Publishing default TF bridge: {self.leader_name}/odom -> {self.follower_name}/odom', throttle_duration_sec=5.0)
 
 
 def main(args=None):
     rclpy.init(args=args)
     node = FollowerDetectorNode()
-    rclpy.spin(node)
-    node.destroy_node()
-    rclpy.shutdown()
+    try:
+        rclpy.spin(node)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        if rclpy.ok():
+            node.destroy_node()
+            rclpy.shutdown()
 
 
 if __name__ == '__main__':

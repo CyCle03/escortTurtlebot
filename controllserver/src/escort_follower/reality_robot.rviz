@@ -194,7 +194,7 @@ Visualization Manager:
       Mass Properties:
         Inertia: false
         Mass: false
-      Name: RobotModel
+      Name: RobotModel (TB3_1)
       TF Prefix: ""
       Update Interval: 0
       Value: true
@@ -253,7 +253,7 @@ Visualization Manager:
       Mass Properties:
         Inertia: false
         Mass: false
-      Name: RobotModel
+      Name: RobotModel (TB3_2)
       TF Prefix: ""
       Update Interval: 0
       Value: true
@@ -338,7 +338,7 @@ Visualization Manager:
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
-    Fixed Frame: map
+    Fixed Frame: TB3_1/odom
     Frame Rate: 30
   Name: root
   Tools:

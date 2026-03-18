@@ -9,7 +9,7 @@ def generate_launch_description():
         executable='escort_vision_node',
         name='escort_vision_node',
         output='screen',
-        parameters=[{'model_path': os.path.join(os.path.expanduser('~'), 'escort_ws/team_project/best.pt')}]
+        parameters=[{'model_path': '/home/penguin/escort_ws/yolo_model/last_openvino_model'}]
     )
 
     gui_node = Node(

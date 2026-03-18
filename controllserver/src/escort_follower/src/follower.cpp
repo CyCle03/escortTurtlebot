@@ -73,7 +73,7 @@ Follower::Follower(const std::string & follower_name, const std::string & leader
     "/ultrasonic_distance", 10, std::bind(&Follower::sonar_callback, this, std::placeholders::_1));
 
   cmd_vel_pub_ = this->create_publisher<geometry_msgs::msg::Twist>(
-    follower_name_ + "/cmd_vel", 10);
+    follower_name_ + "/cmd_vel_not_smoothed", 10);
 
   RCLCPP_INFO(
     this->get_logger(),
@@ -139,10 +139,12 @@ void Follower::sonar_callback(const std_msgs::msg::Float32::SharedPtr msg)
       RCLCPP_WARN(this->get_logger(), "Emergency reverse! (Distance: %.1f cm)", sonar_dist_);
       is_emergency_ = true;
       if (active_goal_handle_) {
+        RCLCPP_INFO(this->get_logger(), "Canceling current tracking goal due to emergency.");
         this->nav2_action_client_->async_cancel_goal(active_goal_handle_);
         active_goal_handle_.reset();
       }
     }
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 500, "Emergency reverse active. Distance: %.1f cm", sonar_dist_);
     geometry_msgs::msg::Twist twist;
     twist.linear.x = -0.07;
     twist.angular.z = 0.0;

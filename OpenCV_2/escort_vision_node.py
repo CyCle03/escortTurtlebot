@@ -1,10 +1,3 @@
-import os
-import sys
-
-# Workaround for Qt conflict: Load system Qt plugins
-os.environ["QT_QPA_PLATFORM_PLUGIN_PATH"] = "/usr/lib/x86_64-linux-gnu/qt5/plugins/"
-os.environ["QT_QPA_PLATFORM"] = "offscreen"
-
 import rclpy
 from rclpy.node import Node
 
@@ -39,10 +32,7 @@ class EscortVisionNode(Node):
         )
 
         # YOLO model
-        self.declare_parameter('model_path', '/home/penguin/escort_ws/yolo_model/last_openvino_model')
-        model_path = self.get_parameter('model_path').get_parameter_value().string_value
-        self.get_logger().info(f"Loading YOLO model from: {model_path}")
-        self.model = YOLO(model_path)
+        self.model = YOLO("/home/ubuntu/robot_ws/src/escort_robot/last_openvino_model")
 
         # mediapipe hands
         self.mp_hands = mp.solutions.hands
@@ -57,7 +47,7 @@ class EscortVisionNode(Node):
         self.frame_count = 0
         self.vip_detect_count = 0
 
-        self.get_logger().info("Escort Vision Node Started with VIP Detection")
+        self.get_logger().info("Escort Vision Node Started")
 
 
     # -------------------------------------------------
@@ -184,9 +174,9 @@ class EscortVisionNode(Node):
                     self.gesture_pub.publish(gesture_msg)
 
 
-def main(args=None):
+def main():
 
-    rclpy.init(args=args)
+    rclpy.init()
 
     node = EscortVisionNode()
 
