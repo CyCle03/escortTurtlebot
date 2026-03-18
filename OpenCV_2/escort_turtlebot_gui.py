@@ -116,6 +116,11 @@ class EscortGestureMaskNode(Node):
 
         return "STOP"
 
+
+    def mask_callback(self, msg):
+        mask_name = msg.data
+        self.gui.update_mask_status(mask_name)
+
     # -------------------------
     # camera callback
     # -------------------------
@@ -304,6 +309,14 @@ class EscortGUI(QWidget):
 
         self.current_gesture = g
         self.gesture_label.setText(f"Gesture : {g}")
+
+    def update_mask_status(self, mask_name):
+        if mask_name == "with_mask":
+            self.status_label.setText("Mask Status : Verified")
+        elif mask_name == "without_mask":
+            self.status_label.setText("Mask Status : Not Wearing")
+        else:
+            self.status_label.setText("Mask Status : Unknown")
 
 
 # -------------------------------------------------
